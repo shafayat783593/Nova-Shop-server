@@ -1,5 +1,5 @@
 import express from "express"
-import { loginUser, logOutUser, myProfile, refreshCSRF, refreshToken, registerUser, verifyOtp, verifyUser } from "../controllers/user.js"
+import { loginUser, logOutUser, myProfile, refreshCSRF, refreshToken, registerUser, verifyOtp, verifyUser } from "../controllers/user.controller.js"
 import { isAuth } from "../middlewares/isAuth.js";
 import { verifyCSRFToken } from "../middlewares/csrfMiddleware.js";
 
