@@ -5,7 +5,7 @@ import userRouter from "./routers/user.routes.js"
 import { createClient } from "redis"
 import cookieParser from "cookie-parser"
 import getCloudinarySignature  from "./routers/cloudinarysignature.routes.js";
-
+import settingsRouter from "./routers/settings.routes.js"
 // const promotionRoutes = require("./routes/promotionRoutes");
 import cors from "cors"
 dotenv.config()
@@ -42,6 +42,7 @@ app.use(cors({
 const PORT = process.env.PORT || 5000
 
 app.use("/api/auth", userRouter)
+app.use("/api/settings", settingsRouter)
 // app.use("/api/promotion", promotionRoutes);
 app.use("/api/cloudinary-sign", getCloudinarySignature);
 

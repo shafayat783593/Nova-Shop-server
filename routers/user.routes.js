@@ -1,5 +1,5 @@
 import express from "express"
-import { loginUser, logOutUser, myProfile, refreshCSRF, refreshToken, registerUser, verifyOtp, verifyUser } from "../controllers/user.controller.js"
+import { forgotPassword,  loginUser,   myProfile, refreshCSRF, refreshToken, registerUser, resetPassword, verifyOtp, verifyUser } from "../controllers/user.controller.js"
 import { isAuth } from "../middlewares/isAuth.js";
 import { verifyCSRFToken } from "../middlewares/csrfMiddleware.js";
 
@@ -11,8 +11,14 @@ router.post("/verify/:token", verifyUser);
 router.post("/login", loginUser);
 
 router.post("/refresh-token",refreshToken)
-router.post("/logout", isAuth, verifyCSRFToken, logOutUser)
+// router.post("/logout", isAuth, verifyCSRFToken, logOutUser)
 router.post("/refresh-csrf", isAuth, refreshCSRF)
+// POST /api/auth/forgot-password  →  sends OTP to email
+router.post("/forgot-password", forgotPassword);
+
+// POST /api/auth/reset-password   →  verifies OTP + sets new password
+router.post("/reset-password", resetPassword);
+
 
 export default router
 

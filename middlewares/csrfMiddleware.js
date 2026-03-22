@@ -1,19 +1,19 @@
 import crypto from "crypto";
 import { redisClint } from "../index.js";
 
-export const generateCSRFToken = async (userId, res) => {
+// ✅ Now per-session CSRF
+export const generateCSRFToken = async (userId, sessionId, res) => {
     const csrfToken = crypto.randomBytes(32).toString("hex");
-
-    const csrfKey = `csrf:${userId}`;
-
-    await redisClint.setEx(csrfKey, 3600, csrfToken);
+    const key = `csrf:${userId}:${sessionId}`;
+    await redisClint.setEx(key, 7 * 24 * 60 * 60, csrfToken);
 
     res.cookie("csrfToken", csrfToken, {
-        httpOnly: false,
-        secure: true,
-        sameSite: "none",
-        maxAge: 60 * 60 * 1000,
+        httpOnly: false, // Frontend needs to read this
+        secure: false,
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
     });
+
     return csrfToken;
 };
 
@@ -61,9 +61,10 @@ export const verifyCSRFToken = async (req, res, next) => {
     }
 };
 
-export const revokeCSRFTOKEN = async (userId) => {
-    const csrfToken = `csrf:${userId}`;
-    await redisClint.del(csrfToken);
+export const revokeCSRFTOKEN = async (userId, sessionId) => {
+    if (sessionId) {
+        await redisClint.del(`csrf:${userId}:${sessionId}`);
+    }
 };
 
 export const refreshCSRFToken = async (userId, res) => {
