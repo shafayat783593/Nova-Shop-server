@@ -77,3 +77,15 @@ export const authorizeAdmin = async (req, res, next) => {
 
     next();
 };
+export const authorizeVendor = async (req, res, next) => {
+    const user = req.user;
+    console.log(user)
+
+    if (!user || user.role !== "vendor") {
+        return res.status(401).json({
+            message: "Opps! You are not allowed for this activity.",
+        });
+    }
+
+    next();
+};

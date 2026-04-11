@@ -1,4 +1,4 @@
-import { loginSchema, registerSchema } from "../config/zod.js";
+import { forgotSchema, loginSchema, registerSchema } from "../config/zod.js";
 import { redisClint } from "../index.js";
 import TryCatch from "../middlewares/TryCatch.js";
 import sanitize from "mongo-sanitize";
@@ -14,7 +14,7 @@ import {
     revokeSession,
     verifyRefreshToken,
     getAllSessions,
-  
+
 } from "../config/generateToken.js";
 import { generateCSRFToken } from "../middlewares/csrfMiddleware.js";
 
@@ -186,7 +186,24 @@ export const verifyOtp = TryCatch(async (req, res) => {
 
 // ── Forgot password ───────────────────────────────────────────────
 export const forgotPassword = TryCatch(async (req, res) => {
-    const { email } = sanitize(req.body);
+    const sanitizedBody = sanitize(req.body);
+
+    // ✅ correct validation (object pass করতে হবে)
+    const validation = forgotSchema.safeParse(sanitizedBody);
+
+    if (!validation.success) {
+        const errors = validation.error.flatten();
+
+        return res.status(400).json({
+            success: false,
+            message: "Validation failed",
+            errors: errors.fieldErrors,
+        });
+    }
+    const { email } = validation.data;
+
+
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!email || !emailRegex.test(email)) {
@@ -211,7 +228,22 @@ export const forgotPassword = TryCatch(async (req, res) => {
 
 // ── Reset password ────────────────────────────────────────────────
 export const resetPassword = TryCatch(async (req, res) => {
-    const { email, otp, newPassword } = sanitize(req.body);
+
+    const sanitizedBody = sanitize(req.body);
+
+    // ✅ correct validation (object pass করতে হবে)
+    const validation = forgotSchema.safeParse(sanitizedBody);
+
+    if (!validation.success) {
+        const errors = validation.error.flatten();
+
+        return res.status(400).json({
+            success: false,
+            message: "Validation failed",
+            errors: errors.fieldErrors,
+        });
+    }
+    const { email, otp, newPassword } = validation.data;
 
     if (!email || !otp || !newPassword) {
         return res.status(400).json({ message: "All fields required" });

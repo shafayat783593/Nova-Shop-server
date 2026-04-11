@@ -1,10 +1,10 @@
 // models/Promotion.js
-const mongoose = require('mongoose');
+import mongoose from "mongoose";
 
 const promotionSchema = new mongoose.Schema({
     text: { type: String, required: true },
     isActive: { type: Boolean, default: true },
-    link: { type: String, default: "" } // চাইলে লিংকের অপশনও রাখতে পারেন
+    link: { type: String, default: "" } 
 }, { timestamps: true });
 
-module.exports = mongoose.model('Promotion', promotionSchema);
+export const promotion = mongoose.model('Promotion', promotionSchema);

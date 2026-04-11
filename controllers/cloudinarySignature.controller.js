@@ -5,8 +5,7 @@ export const getCloudinarySignature = async (req, res) => {
     try {
         const requestedFolder = req.query.folder ;
 
-        // সিকিউরিটি চেক: শুধু staff-documents দিয়ে শুরু হওয়া ফোল্ডারগুলো অ্যালাউ করুন
-        const allowedBaseFolders = [ "profiles"];
+        const allowedBaseFolders = ["profiles","vendor-shop-info"];
         const isAllowed = allowedBaseFolders.some(base => requestedFolder.startsWith(base));
 
         if (!isAllowed) {
