@@ -1,4 +1,4 @@
-import { forgotSchema, loginSchema, registerSchema } from "../config/zod.js";
+import { forgotSchema, loginSchema, registerSchema, resetPasswordSchema } from "../config/zod.js";
 import { redisClint } from "../index.js";
 import TryCatch from "../middlewares/TryCatch.js";
 import sanitize from "mongo-sanitize";
@@ -14,7 +14,6 @@ import {
     revokeSession,
     verifyRefreshToken,
     getAllSessions,
-
 } from "../config/generateToken.js";
 import { generateCSRFToken } from "../middlewares/csrfMiddleware.js";
 
@@ -121,11 +120,9 @@ export const loginUser = TryCatch(async (req, res) => {
         });
     }
 
-    // ✅ Multi-device check
     const result = await generateToken(user, res, req);
 
     if (result.limitReached) {
-        // Return current sessions so frontend can show "logout a device" UI
         const sessions = await getAllSessions(user._id);
         return res.status(409).json({
             message: "Maximum devices reached. Please logout from another device first.",
@@ -157,7 +154,6 @@ export const verifyOtp = TryCatch(async (req, res) => {
     const stored = await redisClint.get(`otp:${email}`);
     if (!stored) return res.status(400).json({ message: "OTP expired" });
 
-    // ✅ Compare as strings — no JSON.parse on an integer
     if (stored !== String(otp)) return res.status(400).json({ message: "Invalid OTP" });
 
     await redisClint.del(`otp:${email}`);
@@ -187,28 +183,18 @@ export const verifyOtp = TryCatch(async (req, res) => {
 // ── Forgot password ───────────────────────────────────────────────
 export const forgotPassword = TryCatch(async (req, res) => {
     const sanitizedBody = sanitize(req.body);
-
-    // ✅ correct validation (object pass করতে হবে)
     const validation = forgotSchema.safeParse(sanitizedBody);
 
     if (!validation.success) {
         const errors = validation.error.flatten();
-
         return res.status(400).json({
             success: false,
             message: "Validation failed",
             errors: errors.fieldErrors,
         });
     }
+
     const { email } = validation.data;
-
-
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    if (!email || !emailRegex.test(email)) {
-        return res.status(400).json({ message: "Valid email required" });
-    }
 
     const rateLimitKey = `forgot-rate:${req.ip}:${email}`;
     if (await redisClint.get(rateLimitKey)) {
@@ -227,30 +213,22 @@ export const forgotPassword = TryCatch(async (req, res) => {
 });
 
 // ── Reset password ────────────────────────────────────────────────
+// ✅ FIX: resetPasswordSchema ব্যবহার করো — forgotSchema-তে otp/newPassword নেই
 export const resetPassword = TryCatch(async (req, res) => {
-
     const sanitizedBody = sanitize(req.body);
 
-    // ✅ correct validation (object pass করতে হবে)
-    const validation = forgotSchema.safeParse(sanitizedBody);
+    const validation = resetPasswordSchema.safeParse(sanitizedBody);
 
     if (!validation.success) {
         const errors = validation.error.flatten();
-
         return res.status(400).json({
             success: false,
             message: "Validation failed",
             errors: errors.fieldErrors,
         });
     }
-    const { email, otp, newPassword } = validation.data;
 
-    if (!email || !otp || !newPassword) {
-        return res.status(400).json({ message: "All fields required" });
-    }
-    if (newPassword.length < 8) {
-        return res.status(400).json({ message: "Password must be at least 8 characters" });
-    }
+    const { email, otp, newPassword } = validation.data;
 
     const stored = await redisClint.get(`reset:password:${email}`);
     if (!stored) return res.status(400).json({ message: "OTP expired or invalid" });
@@ -268,7 +246,7 @@ export const resetPassword = TryCatch(async (req, res) => {
     await redisClint.del(`reset:password:${email}`);
     await redisClint.del(`user:${user._id}`);
 
-    // ✅ Revoke all sessions after password change (security)
+    // ✅ Revoke all sessions after password change
     await revokeRefreshToken(user._id);
 
     res.status(200).json({ message: "Password changed. Please login again." });
@@ -295,7 +273,6 @@ export const refreshToken = TryCatch(async (req, res) => {
         return res.status(404).json({ message: "User not found" });
     }
 
-    // ✅ role included
     await genetateAccessToken(user._id, user.role, decode.sessionId, res);
     return res.status(200).json({ message: "Token refreshed" });
 });
@@ -331,5 +308,48 @@ export const myProfile = TryCatch(async (req, res) => {
     res.status(200).json({ user, sessionInfo });
 });
 
-// ── GET all active sessions (device list) ────────────────────────
+// ── Logout current device ─────────────────────────────────────────
+// ✅ FIX: revokeSession এর পর cookies ও clear করো
+export const logoutUser = TryCatch(async (req, res) => {
+    const userId = req.user?._id;
+    const sessionId = req.sessionId;
 
+    if (userId && sessionId) {
+        await revokeSession(userId, sessionId);
+    }
+
+    res.clearCookie("accessToken", { httpOnly: true, sameSite: "lax" });
+    res.clearCookie("refreshToken", { httpOnly: true, sameSite: "lax" });
+    res.clearCookie("csrfToken", { httpOnly: true, sameSite: "lax" });
+
+    res.status(200).json({ message: "Logged out successfully" });
+});
+
+// ── Logout ALL devices ────────────────────────────────────────────
+// ✅ FIX: revokeRefreshToken সব sessions + keys মুছে দেয়
+export const logoutAll = TryCatch(async (req, res) => {
+    const userId = req.user?._id;
+
+    if (userId) {
+        await revokeRefreshToken(userId); // সব sessions, refreshTokens, csrf মুছে দেয়
+    }
+
+    res.clearCookie("accessToken", { httpOnly: true, sameSite: "lax" });
+    res.clearCookie("refreshToken", { httpOnly: true, sameSite: "lax" });
+    res.clearCookie("csrfToken", { httpOnly: true, sameSite: "lax" });
+
+    res.status(200).json({ message: "Logged out from all devices" });
+});
+
+// ── GET all active sessions ────────────────────────────────────────
+export const getActiveSessions = TryCatch(async (req, res) => {
+    const sessions = await getAllSessions(req.user._id);
+    res.status(200).json({ sessions });
+});
+
+// ── Logout specific device ─────────────────────────────────────────
+export const logoutDevice = TryCatch(async (req, res) => {
+    const { sessionId } = req.params;
+    await revokeSession(req.user._id, sessionId);
+    res.status(200).json({ message: "Device logged out" });
+});

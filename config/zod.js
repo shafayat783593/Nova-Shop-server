@@ -1,4 +1,4 @@
-import {  email, z } from "zod";
+import {  z } from "zod";
 export const registerSchema =z.object({
     name:z.string().min(3, "Name must be at lest 3 characters long"),
     email:z.string().email("Invalide eamil format"),
@@ -15,20 +15,15 @@ export const loginSchema = z.object({
 
 
 
- export const forgotSchema = z.object({
+export const forgotSchema = z.object({
     email: z.string().email("Invalid email address"),
 });
 
-export const resetSchema = z.object({
-    password: z
-        .string()
-        .min(8, "Password must be at least 8 characters")
-        .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-        .regex(/[0-9]/, "Password must contain at least one number"),
-    confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
+// ✅ নতুন schema — resetPassword route এ এটা ব্যবহার করো
+export const resetPasswordSchema = z.object({
+    email: z.string().email("Invalid email address"),
+    otp: z.string().min(6, "OTP must be 6 digits").max(6, "OTP must be 6 digits"),
+    newPassword: z.string().min(8, "Password must be at least 8 characters"),
 });
 
 
@@ -65,3 +60,120 @@ export const shopCreateSchema = z.object({
     message: "Please provide complete payout details for the selected method",
     path: ["payoutMethod"],
 });
+
+
+
+
+
+
+export const variantSchema = z.object({
+    size: z
+        .string()
+        .trim()
+        .min(1, "Size is required")
+        .optional(),           // ← Election product এর জন্য optional
+
+    color: z
+        .string()
+        .trim()
+        .min(1, "Color is required")
+        .optional(),           // ← Election product এর জন্য optional
+
+    stock: z
+        .number({ invalid_type_error: "Stock must be a number" })
+        .int("Stock must be an integer")
+        .min(0, "Stock cannot be negative"),
+
+    price: z
+        .number({ invalid_type_error: "Price must be a number" })
+        .positive("Price must be positive"),
+
+    sku: z.string().trim().optional(),
+});
+
+
+
+
+
+
+
+
+
+
+// Main Product Schema
+export const productSchema = z.object({
+    name: z
+        .string()
+        .min(2, "Name must be at least 2 characters")
+        .max(120, "Name is too long"),
+
+    description: z
+        .string()
+        .min(10, "Description must be at least 10 characters")
+        .max(2000, "Description is too long"),
+
+    category: z.string().min(1, "Category is required"),
+
+    tags: z.array(z.string().trim()).optional().default([]),
+
+    basePrice: z
+        .number({ invalid_type_error: "Base price must be a number" })
+        .positive("Base price must be positive"),
+
+    discountedPrice: z
+        .number({ invalid_type_error: "Discounted price must be a number" })
+        .nonnegative("Discounted price cannot be negative")
+        .optional(),
+
+    images: z
+        .array(z.string().url("Each image must be a valid URL"))
+        .min(1, "At least one image is required"),
+
+    gallery: z
+        .array(z.string().url("Gallery images must be valid URLs"))
+        .optional()
+        .default([]),
+
+    // 🔥 এখানে পরিবর্তন করা হয়েছে
+    hasVariants: z.boolean().default(false),
+
+    variants: z
+        .array(variantSchema)
+        .optional()
+        .default([]),
+
+    isActive: z.boolean().optional().default(true),
+    isFeatured: z.boolean().optional().default(false),
+})
+    // Custom Validation: যদি hasVariants true হয়, তাহলে অন্তত ১টা variant থাকতে হবে
+    .superRefine((data, ctx) => {
+        if (data.hasVariants === true) {
+            if (!data.variants || data.variants.length === 0) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ["variants"],
+                    message: "At least one variant is required when hasVariants is true",
+                });
+            }
+
+            // Optional: size/color চেক করতে পারো (যদি চাও)
+            data.variants.forEach((variant, index) => {
+                if (!variant.size) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        path: ["variants", index, "size"],
+                        message: "Size is required for variants",
+                    });
+                }
+                if (!variant.color) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        path: ["variants", index, "color"],
+                        message: "Color is required for variants",
+                    });
+                }
+            });
+        }
+    });
+
+export const productUpdateSchema = productSchema.partial();

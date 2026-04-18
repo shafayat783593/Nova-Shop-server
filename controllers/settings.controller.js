@@ -81,12 +81,26 @@ export const changePassword = TryCatch(async (req, res) => {
 });
 
 // ── TOGGLE 2FA ─────────────────────────────────────────────
-export const toggleTwoFactor = TryCatch(async (req, res) => {
-    const user = await User.findById(req.user._id);
+export const toggleTwoFactor = TryCatch(async (req, res, next) => {
+    const userId = req.user._id; // Use optional chaining to prevent crashes
+console.log("Toggling 2FA for user:", userId);
+    console.log("USER:", req.user);
+    console.log("SESSION:", req.sessionId);
+    if (!userId) {
+        return res.status(401).json({ message: "Not authorized, no user ID" });
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+        return res.status(404).json({ message: "User not found" });
+    }
+
     user.twoFactorEnabled = !user.twoFactorEnabled;
     await user.save();
 
     res.status(200).json({
+        success: true,
         message: `Two-factor authentication ${user.twoFactorEnabled ? "enabled" : "disabled"}`,
         twoFactorEnabled: user.twoFactorEnabled,
     });
