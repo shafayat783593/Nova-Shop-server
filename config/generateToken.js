@@ -3,7 +3,7 @@ import { redisClint } from "../index.js";
 import { generateCSRFToken, revokeCSRFTOKEN } from "../middlewares/csrfMiddleware.js";
 import crypto from "crypto";
 
-const MAX_SESSIONS = 2; // ✅ maximum device limit
+const MAX_SESSIONS = 4; // ✅ maximum device limit
 
 // ─── Helper: device info from request ───────────────────────────
 export const extractDeviceInfo = (req) => {

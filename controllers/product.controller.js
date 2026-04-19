@@ -160,13 +160,19 @@ export const getAllProducts = async (req, res) => {
 
 // ─── GET ONE ──────────────────────────────────────────────────────────────────
 export const getProductById = async (req, res) => {
+    const { slug } = req.params; // রাউট থেকে slug নামেই প্যারামিটার আসবে
+
     try {
-        const product = await Product.findById(req.params.id).lean();
-        if (!product) return sendError(res, "Product not found", 404);
+        // যেহেতু আপনার ডাটাবেসে slug একটি স্ট্রিং, তাই অবজেক্ট আকারে পাঠান
+        const product = await Product.findOne({ slug: slug }).lean();
+
+        if (!product) {
+            return sendError(res, "Product not found", 404);
+        }
 
         return res.status(200).json({ success: true, data: product });
     } catch (err) {
-        return sendError(res, err.message);
+        return sendError(res, err.message, 500);
     }
 };
 

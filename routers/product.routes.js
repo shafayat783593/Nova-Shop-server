@@ -40,7 +40,7 @@ const router = express.Router();
 // ─── Public ───────────────────────────────────────────────────────────────────
 router.get("/",isAuth, getAllProducts);
 router.get("/categories", isAuth, getCategories);
-router.get("/:id", isAuth, getProductById);
+router.get("/:slug", isAuth, getProductById);
 
 // ─── Protected (Admin only) ───────────────────────────────────────────────────
 router.post("/", isAuth, authorizeAdmin, createProduct);
