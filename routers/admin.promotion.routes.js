@@ -5,7 +5,7 @@ import {
     getPromotionById,
     updatePromotion,
     deletePromotion
-} from "../controllers/promotion.controller.js";
+} from "../controllers/admin.promotion.controller.js";
 
 const router = express.Router();
 
