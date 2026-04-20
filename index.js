@@ -8,6 +8,7 @@ import getCloudinarySignature  from "./routers/cloudinarysignature.routes.js";
 import settingsRouter from "./routers/settings.routes.js"
 import shop from "./routers/shop.routes.js"
 import product from "./routers/product.routes.js"
+import bannerRoute from "./routers/admin.banner.routes.js"
 // const promotionRoutes = require("./routes/promotionRoutes");
 import cors from "cors"
 dotenv.config()
@@ -49,6 +50,7 @@ app.use("/api/shop", shop)
 // app.use("/api/promotion", promotionRoutes);
 app.use("/api/cloudinary-sign", getCloudinarySignature);
 app.use("/api/products", product);
+app.use("/api/banners", bannerRoute);
 
 app.listen(PORT, () => {
     console.log(`server is running on the port ${PORT}`)

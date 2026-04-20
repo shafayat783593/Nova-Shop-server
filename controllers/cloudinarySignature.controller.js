@@ -5,7 +5,7 @@ export const getCloudinarySignature = async (req, res) => {
     try {
         const requestedFolder = req.query.folder ;
 
-        const allowedBaseFolders = ["profiles", "vendor-shop-info","products"];
+        const allowedBaseFolders = ["profiles", "vendor-shop-info", "products","banners"];
         const isAllowed = allowedBaseFolders.some(base => requestedFolder.startsWith(base));
 
         if (!isAllowed) {
