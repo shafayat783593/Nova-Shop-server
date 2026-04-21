@@ -20,8 +20,6 @@
 // export default router;
 
 
-
-
 import express from "express";
 import {
     createProduct,
@@ -30,22 +28,27 @@ import {
     updateProduct,
     deleteProduct,
     toggleProductStatus,
+    toggleFeatured,
     getCategories,
+    getProductVariants,
+    updateVariantStock,
 } from "../controllers/product.controller.js";
-
 import { authorizeAdmin, isAuth } from "../middlewares/isAuth.js";
 
 const router = express.Router();
 
 // ─── Public ───────────────────────────────────────────────────────────────────
-router.get("/",isAuth, getAllProducts);
-router.get("/categories", isAuth, getCategories);
-router.get("/:slug", isAuth, getProductById);
+router.get("/", getAllProducts);
+router.get("/categories", getCategories);
+router.get("/:slug", getProductById);
+router.get("/:id/variants", getProductVariants);
 
 // ─── Protected (Admin only) ───────────────────────────────────────────────────
 router.post("/", isAuth, authorizeAdmin, createProduct);
 router.put("/:id", isAuth, authorizeAdmin, updateProduct);
 router.delete("/:id", isAuth, authorizeAdmin, deleteProduct);
 router.patch("/:id/toggle", isAuth, authorizeAdmin, toggleProductStatus);
+router.patch("/:id/feature", isAuth, authorizeAdmin, toggleFeatured);
+router.patch("/:id/variants/:variantId/stock", isAuth, authorizeAdmin, updateVariantStock);
 
 export default router;

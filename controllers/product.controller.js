@@ -1,4 +1,4 @@
-import { productSchema, productUpdateSchema } from "../config/zod.js";
+import mongoose from "mongoose";
 import Product from "../models/product.model.js";
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
@@ -9,35 +9,49 @@ const sendError = (res, message, status = 500, errors = null) => {
 };
 
 // ─── CREATE PRODUCT ───────────────────────────────────────────────────────────
+// POST /api/products
 export const createProduct = async (req, res) => {
     try {
-        const validation = productSchema.safeParse(req.body);
+        const {
+            name,
+            description,
+            category,
+            tags,
+            basePrice,
+            discountedPrice,
+            images,
+            gallery,
+            hasVariants,
+            variants,
+            isActive,
+            isFeatured,
+        } = req.body;
 
-        if (!validation.success) {
-            const allErrors = validation.error.issues.map((issue) => ({
-                field: issue.path?.join(".") || "unknown",
-                message: issue.message,
-                code: issue.code,
-            }));
-
-            return res.status(400).json({
-                success: false,
-                message: "Validation error",
-                errors: allErrors,
-            });
+        // Basic required field check
+        if (!name || !description || !category || !basePrice) {
+            return sendError(res, "name, description, category, and basePrice are required", 400);
         }
 
-        const productData = validation.data;
-
-        // Extra Safety: যদি hasVariants true হয় কিন্তু variants খালি থাকে
-        if (productData.hasVariants && (!productData.variants || productData.variants.length === 0)) {
-            return res.status(400).json({
-                success: false,
-                message: "At least one variant is required when hasVariants is true",
-            });
+        // hasVariants true হলে variants লাগবেই
+        if (hasVariants === true && (!variants || variants.length === 0)) {
+            return sendError(res, "At least one variant is required when hasVariants is true", 400);
         }
 
-        const product = new Product(productData);
+        const product = new Product({
+            name,
+            description,
+            category,
+            tags,
+            basePrice,
+            discountedPrice,
+            images,
+            gallery,
+            hasVariants,
+            variants,
+            isActive,
+            isFeatured,
+        });
+
         await product.save();
 
         return res.status(201).json({
@@ -56,34 +70,30 @@ export const createProduct = async (req, res) => {
 };
 
 // ─── UPDATE PRODUCT ───────────────────────────────────────────────────────────
+// PUT /api/products/:id
 export const updateProduct = async (req, res) => {
     try {
-        // For update we use a more flexible approach because partial() breaks superRefine
-        const validation = productSchema.partial().safeParse(req.body);
+        const updateData = req.body;
 
-        if (!validation.success) {
-            const allErrors = validation.error.issues.map((issue) => ({
-                field: issue.path?.join(".") || "unknown",
-                message: issue.message,
-            }));
-
-            return res.status(400).json({
-                success: false,
-                message: "Validation error",
-                errors: allErrors,
-            });
-        }
-
-        const updateData = validation.data;
-
-        // Manual check for hasVariants logic during update
+        // hasVariants true পাঠালে variants চেক করো
         if (updateData.hasVariants === true) {
             if (updateData.variants && updateData.variants.length === 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "At least one variant is required when hasVariants is true",
-                });
+                return sendError(res, "At least one variant is required when hasVariants is true", 400);
             }
+        }
+
+        // hasVariants false পাঠালে variants মুছে দাও
+        if (updateData.hasVariants === false) {
+            updateData.variants = [];
+        }
+
+        // name পরিবর্তন হলে slug regenerate করো
+        if (updateData.name) {
+            updateData.slug = updateData.name
+                .toLowerCase()
+                .trim()
+                .replace(/[^a-z0-9]+/g, "-")
+                .replace(/(^-|-$)/g, "");
         }
 
         const product = await Product.findByIdAndUpdate(
@@ -100,12 +110,16 @@ export const updateProduct = async (req, res) => {
             data: product,
         });
     } catch (err) {
+        if (err.code === 11000) {
+            return sendError(res, "A product with this name/slug already exists", 409);
+        }
         console.error("Update Product Error:", err);
         return sendError(res, err.message || "Something went wrong");
     }
 };
 
 // ─── GET ALL PRODUCTS ─────────────────────────────────────────────────────────
+// GET /api/products?page=1&limit=12&category=shoes&search=nike&sort=-createdAt&isActive=true&isFeatured=true
 export const getAllProducts = async (req, res) => {
     try {
         const {
@@ -116,6 +130,9 @@ export const getAllProducts = async (req, res) => {
             sort = "-createdAt",
             isActive,
             isFeatured,
+            minPrice,
+            maxPrice,
+            hasVariants,
         } = req.query;
 
         const filter = {};
@@ -123,11 +140,22 @@ export const getAllProducts = async (req, res) => {
         if (category) filter.category = category;
         if (isActive !== undefined) filter.isActive = isActive === "true";
         if (isFeatured !== undefined) filter.isFeatured = isFeatured === "true";
+        if (hasVariants !== undefined) filter.hasVariants = hasVariants === "true";
+
+        // Price range filter
+        if (minPrice || maxPrice) {
+            filter.basePrice = {};
+            if (minPrice) filter.basePrice.$gte = Number(minPrice);
+            if (maxPrice) filter.basePrice.$lte = Number(maxPrice);
+        }
+
+        // Search across name, description, category, tags
         if (search) {
             filter.$or = [
                 { name: { $regex: search, $options: "i" } },
                 { description: { $regex: search, $options: "i" } },
                 { category: { $regex: search, $options: "i" } },
+                { tags: { $in: [new RegExp(search, "i")] } },
             ];
         }
 
@@ -158,25 +186,23 @@ export const getAllProducts = async (req, res) => {
     }
 };
 
-// ─── GET ONE ──────────────────────────────────────────────────────────────────
+// ─── GET ONE BY SLUG ──────────────────────────────────────────────────────────
+// GET /api/products/:slug
 export const getProductById = async (req, res) => {
-    const { slug } = req.params; // রাউট থেকে slug নামেই প্যারামিটার আসবে
-
     try {
-        // যেহেতু আপনার ডাটাবেসে slug একটি স্ট্রিং, তাই অবজেক্ট আকারে পাঠান
-        const product = await Product.findOne({ slug: slug }).lean();
+        const { slug } = req.params;
+        const product = await Product.findOne({ slug }).lean();
 
-        if (!product) {
-            return sendError(res, "Product not found", 404);
-        }
+        if (!product) return sendError(res, "Product not found", 404);
 
         return res.status(200).json({ success: true, data: product });
     } catch (err) {
-        return sendError(res, err.message, 500);
+        return sendError(res, err.message);
     }
 };
 
 // ─── DELETE ───────────────────────────────────────────────────────────────────
+// DELETE /api/products/:id
 export const deleteProduct = async (req, res) => {
     try {
         const product = await Product.findByIdAndDelete(req.params.id);
@@ -191,7 +217,8 @@ export const deleteProduct = async (req, res) => {
     }
 };
 
-// ─── TOGGLE STATUS ────────────────────────────────────────────────────────────
+// ─── TOGGLE ACTIVE STATUS ─────────────────────────────────────────────────────
+// PATCH /api/products/:id/toggle
 export const toggleProductStatus = async (req, res) => {
     try {
         const product = await Product.findById(req.params.id);
@@ -210,11 +237,85 @@ export const toggleProductStatus = async (req, res) => {
     }
 };
 
+// ─── TOGGLE FEATURED ──────────────────────────────────────────────────────────
+// PATCH /api/products/:id/feature
+export const toggleFeatured = async (req, res) => {
+    try {
+        const product = await Product.findById(req.params.id);
+        if (!product) return sendError(res, "Product not found", 404);
+
+        product.isFeatured = !product.isFeatured;
+        await product.save();
+
+        return res.status(200).json({
+            success: true,
+            message: `Product is now ${product.isFeatured ? "featured" : "unfeatured"}`,
+            data: { isFeatured: product.isFeatured },
+        });
+    } catch (err) {
+        return sendError(res, err.message);
+    }
+};
+
 // ─── GET CATEGORIES ───────────────────────────────────────────────────────────
+// GET /api/products/categories
 export const getCategories = async (req, res) => {
     try {
         const categories = await Product.distinct("category");
         return res.status(200).json({ success: true, data: categories });
+    } catch (err) {
+        return sendError(res, err.message);
+    }
+};
+
+// ─── GET VARIANTS OF A PRODUCT ────────────────────────────────────────────────
+// GET /api/products/:id/variants
+export const getProductVariants = async (req, res) => {
+    try {
+        const product = await Product.findById(req.params.id).select("name variants hasVariants").lean();
+        if (!product) return sendError(res, "Product not found", 404);
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                productName: product.name,
+                hasVariants: product.hasVariants,
+                variants: product.variants,
+            },
+        });
+    } catch (err) {
+        return sendError(res, err.message);
+    }
+};
+
+// ─── UPDATE STOCK OF A SINGLE VARIANT ────────────────────────────────────────
+// PATCH /api/products/:id/variants/:variantId/stock
+export const updateVariantStock = async (req, res) => {
+    try {
+        const { id, variantId } = req.params;
+        const { stock } = req.body;
+
+        if (stock === undefined || stock < 0) {
+            return sendError(res, "Valid stock value is required", 400);
+        }
+
+        const product = await Product.findOneAndUpdate(
+            { _id: id, "variants._id": variantId },
+            { $set: { "variants.$.stock": stock } },
+            { new: true }
+        );
+
+        if (!product) return sendError(res, "Product or variant not found", 404);
+
+        const updatedVariant = product.variants.find(
+            (v) => v._id.toString() === variantId
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Variant stock updated",
+            data: updatedVariant,
+        });
     } catch (err) {
         return sendError(res, err.message);
     }
