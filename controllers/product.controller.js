@@ -74,20 +74,20 @@ export const createProduct = async (req, res) => {
 export const updateProduct = async (req, res) => {
     try {
         const updateData = req.body;
+        const { slug } = req.params; // ✅ slug ধরো
 
-        // hasVariants true পাঠালে variants চেক করো
+        // ── Validation ─────────────────────
         if (updateData.hasVariants === true) {
             if (updateData.variants && updateData.variants.length === 0) {
                 return sendError(res, "At least one variant is required when hasVariants is true", 400);
             }
         }
 
-        // hasVariants false পাঠালে variants মুছে দাও
         if (updateData.hasVariants === false) {
             updateData.variants = [];
         }
 
-        // name পরিবর্তন হলে slug regenerate করো
+        // ── Slug regenerate (if name changed) ─────────────────
         if (updateData.name) {
             updateData.slug = updateData.name
                 .toLowerCase()
@@ -96,8 +96,9 @@ export const updateProduct = async (req, res) => {
                 .replace(/(^-|-$)/g, "");
         }
 
-        const product = await Product.findByIdAndUpdate(
-            req.params.id,
+        // ── Update by slug ─────────────────
+        const product = await Product.findOneAndUpdate(
+            { slug: slug },   // ✅ এখানে slug use করো
             { $set: updateData },
             { new: true, runValidators: true }
         );
@@ -109,6 +110,7 @@ export const updateProduct = async (req, res) => {
             message: "Product updated successfully",
             data: product,
         });
+
     } catch (err) {
         if (err.code === 11000) {
             return sendError(res, "A product with this name/slug already exists", 409);

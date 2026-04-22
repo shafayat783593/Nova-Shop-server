@@ -45,7 +45,7 @@ router.get("/:id/variants", getProductVariants);
 
 // ─── Protected (Admin only) ───────────────────────────────────────────────────
 router.post("/", isAuth, authorizeAdmin, createProduct);
-router.put("/:id", isAuth, authorizeAdmin, updateProduct);
+router.put("/:slug", isAuth, authorizeAdmin, updateProduct);
 router.delete("/:id", isAuth, authorizeAdmin, deleteProduct);
 router.patch("/:id/toggle", isAuth, authorizeAdmin, toggleProductStatus);
 router.patch("/:id/feature", isAuth, authorizeAdmin, toggleFeatured);
