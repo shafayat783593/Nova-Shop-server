@@ -39,9 +39,16 @@ const wishlistSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 // Middleware: সেভ করার আগে অটোমেটিক totalItems আপডেট হবে
-wishlistSchema.pre('save', function (next) {
+// wishlistSchema.pre('save', function (next) {
+//     this.totalItems = this.items.length;
+//     next();
+// });
+
+wishlistSchema.pre('save', async function () {
+    
     this.totalItems = this.items.length;
-    next();
 });
+
+
 const Wishlist = mongoose.models.Wishlist || mongoose.model("Wishlist", wishlistSchema);
 export default Wishlist;
