@@ -2,7 +2,7 @@ import Cart from "../models/cart.modle.js";
 import Product from "../models/product.model.js";
 import Promotion from "../models/promotion.model.js";
 import { v4 as uuidv4 } from "uuid";
-
+import { recalculate } from "../utils/runPromotionEngine.js";
 // ─── Utility ──────────────────────────────────────────────────────────────────
 const sendError = (res, message, status = 500) =>
     res.status(status).json({ success: false, message });
@@ -172,25 +172,25 @@ async function runPromotionEngine(items, paymentMethod) {
 }
 
 // ─── RECALCULATE & SAVE ───────────────────────────────────────────────────────
-async function recalculate(cart, paymentMethod) {
-    // ← KEY FIX: Mongoose subdocuments → plain objects BEFORE engine
-    const plainItems = cart.items.map((item) => item.toObject ? item.toObject() : { ...item });
+// async function recalculate(cart, paymentMethod) {
+//     // ← KEY FIX: Mongoose subdocuments → plain objects BEFORE engine
+//     const plainItems = cart.items.map((item) => item.toObject ? item.toObject() : { ...item });
 
-    const { enrichedItems, subtotal, discount, shippingFee, total } =
-        await runPromotionEngine(plainItems, paymentMethod);
+//     const { enrichedItems, subtotal, discount, shippingFee, total } =
+//         await runPromotionEngine(plainItems, paymentMethod);
 
-    // Write back to Mongoose document
-    cart.items = enrichedItems;
-    cart.subtotal = n(subtotal);
-    cart.discount = n(discount);
-    cart.shippingFee = n(shippingFee);
-    cart.total = n(total);
-    cart.totalItems = cart.items.reduce((s, i) => s + n(i.quantity), 0);
-    cart.lastActivityAt = new Date();
+//     // Write back to Mongoose document
+//     cart.items = enrichedItems;
+//     cart.subtotal = n(subtotal);
+//     cart.discount = n(discount);
+//     cart.shippingFee = n(shippingFee);
+//     cart.total = n(total);
+//     cart.totalItems = cart.items.reduce((s, i) => s + n(i.quantity), 0);
+//     cart.lastActivityAt = new Date();
 
-    await cart.save();
-    return cart;
-}
+//     await cart.save();
+//     return cart;
+// }
 
 // ─── GET CART ─────────────────────────────────────────────────────────────────
 export const getCart = async (req, res) => {

@@ -1,6 +1,7 @@
 import Wishlist from "../models/wishlist.model.js";
 import Product from "../models/product.model.js";
 import Cart from "../models/cart.modle.js";
+import { recalculate } from "../utils/runPromotionEngine.js";
 
 const sendError = (res, message, status = 500) =>
     res.status(status).json({ success: false, message });
@@ -156,19 +157,23 @@ export const moveToCart = async (req, res) => {
     try {
         const userId = req.user._id;
         const { productId } = req.params;
-        const { quantity = 1 } = req.body;
-
-        // 1. Find product and check stock
+        const quantity = req.body && req.body.quantity ? Number(req.body.quantity) : 1;        // 1. Product check
         const product = await Product.findById(productId);
         if (!product || !product.isActive) return sendError(res, "Product not found or inactive", 404);
 
+        // 2. Wishlist check
         const wishlist = await Wishlist.findOne({ user: userId });
         if (!wishlist) return sendError(res, "Wishlist not found", 404);
 
-        const wishlistItem = wishlist.items.find(i => i.product.toString() === productId);
+        const wishlistItem = wishlist.items.find(
+            i => i.product.toString() === productId
+        );
         if (!wishlistItem) return sendError(res, "Product not in wishlist", 404);
 
-        // 2. Stock check
+        // 3. Stock check
+        // moveToCart এ এই অংশটা replace করো
+
+        // 3. Stock check
         let stock = null;
         let price = Number(product.discountedPrice ?? product.basePrice);
         let variantObjId = null;
@@ -176,12 +181,11 @@ export const moveToCart = async (req, res) => {
         if (product.hasVariants && wishlistItem.variant) {
             const variant = product.variants.id(wishlistItem.variant);
             if (!variant) return sendError(res, "Variant not found", 404);
-            stock = Number(variant.stock);
+            stock = Number(variant.stock ?? 0);
             price = Number(variant.price);
             variantObjId = variant._id;
-        } else {
-            // non-variant stock (if your model has it)
-            stock = product.stock !== undefined ? Number(product.stock) : null;
+        } else if (product.stock !== undefined && product.stock !== null) {
+            stock = Number(product.stock);
         }
 
         if (stock !== null && stock < 1) {
@@ -192,9 +196,20 @@ export const moveToCart = async (req, res) => {
             });
         }
 
-        // 3. Add to cart
+        // 4. Cart
         let cart = await Cart.findOne({ user: userId, isCheckedOut: false });
-        if (!cart) cart = new Cart({ user: userId });
+        if (!cart) cart = new Cart({ user: userId, items: [] });
+
+        // ← KEY FIX: stock null হলে qty = quantity, না হলে stock এর মধ্যে clamp করো
+        const qty = stock !== null ? Math.min(Number(quantity), stock) : Number(quantity);
+
+        if (qty < 1) {
+            return res.status(400).json({
+                success: false,
+                outOfStock: true,
+                message: "This product is out of stock",
+            });
+        }
 
         const existingIdx = cart.items.findIndex(i => {
             const sameProduct = i.product?.toString() === productId;
@@ -204,15 +219,13 @@ export const moveToCart = async (req, res) => {
             return sameProduct && sameVariant;
         });
 
-        const qty = Math.min(Number(quantity), stock ?? Infinity);
-
         if (existingIdx > -1) {
             const newQty = Number(cart.items[existingIdx].quantity) + qty;
             cart.items[existingIdx].quantity = stock ? Math.min(newQty, stock) : newQty;
         } else {
             cart.items.push({
                 product: product._id,
-                variant: variantObjId,
+                variant: variantObjId || undefined,
                 nameSnapshot: product.name,
                 imageSnapshot: product.images?.[0] || "",
                 quantity: qty,
@@ -223,12 +236,13 @@ export const moveToCart = async (req, res) => {
             });
         }
 
-        cart.totalItems = cart.items.reduce((s, i) => s + Number(i.quantity), 0);
-        cart.lastActivityAt = new Date();
-        await cart.save();
+        // 5. recalculate করো (promotion engine চালাও)
+        await recalculate(cart, null); // ← cart.save() এর বদলে এটা
 
-        // 4. Remove from wishlist
-        wishlist.items = wishlist.items.filter(i => i.product.toString() !== productId);
+        // 6. Wishlist থেকে remove
+        wishlist.items = wishlist.items.filter(
+            i => i.product.toString() !== productId
+        );
         await wishlist.save();
 
         return res.status(200).json({
@@ -236,5 +250,8 @@ export const moveToCart = async (req, res) => {
             message: "Moved to cart",
             productId: product._id,
         });
-    } catch (err) { return sendError(res, err.message); }
+    } catch (err) {
+        console.error("moveToCart error:", err);
+        return sendError(res, err.message);
+    }
 };
