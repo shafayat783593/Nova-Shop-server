@@ -5,7 +5,6 @@ import {
     getCart, addToCart, updateCartItem,
     removeCartItem, clearCart, mergeCart,
     applyCoupon, removeCoupon,
-    countCartitme,
 } from "../controllers/cart.controller.js";
 import { isAuth } from "../middlewares/isAuth.js";
  const router = express.Router();
@@ -19,7 +18,6 @@ router.delete("/item/:itemId", isAuth, removeCartItem);
 router.delete("/", isAuth, clearCart);
 router.post("/coupon", isAuth, applyCoupon);
 router.delete("/coupon", isAuth, removeCoupon);
-router.get("/countCartitme",isAuth, countCartitme)
 
 
 // merge এ isAuth থাকবেই — login ছাড়া merge হবে না

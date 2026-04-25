@@ -502,8 +502,3 @@ export const removeCoupon = async (req, res) => {
 
 
 
-export const countCartitme = async (req, res) => {
-    const cart = await Cart.findOne({ user: req.user._id, isCheckedOut: false }).lean();
-    const count = cart?.items?.reduce((s, i) => s + (i.quantity || 0), 0) || 0;
-    res.json({ success: true, count });
-}

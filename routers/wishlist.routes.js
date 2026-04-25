@@ -8,7 +8,7 @@ import {
     clearWishlist,
     checkWishlisted,
     moveToCart,
-    countWishlist,
+   
 } from "../controllers/wishlist.controller.js";
 import { isAuth } from "../middlewares/isAuth.js";
 
@@ -20,7 +20,6 @@ router.use(isAuth);
 // ─── Read ──────────────────────────────────────────────────────────────────
 router.get("/", getWishlist);           // GET  full wishlist
 router.get("/check/:productId", checkWishlisted);       // GET  is this product wishlisted?
-router.get("/countWishlist",isAuth, countWishlist)
 
 // ─── Write ─────────────────────────────────────────────────────────────────
 router.post("/add", addToWishlist);         // POST add product

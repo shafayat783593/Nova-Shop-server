@@ -257,8 +257,3 @@ export const moveToCart = async (req, res) => {
 };
 
 
-export const countWishlist=  async (req, res) => {
-    const wishlist = await Wishlist.findOne({ user: req.user._id }).lean();
-    const count = wishlist?.items?.length || 0;
-    res.json({ success: true, count });
-}
