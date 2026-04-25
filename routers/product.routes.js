@@ -32,6 +32,7 @@ import {
     getCategories,
     getProductVariants,
     updateVariantStock,
+    getCategoriesPromotion,
 } from "../controllers/product.controller.js";
 import { authorizeAdmin, isAuth } from "../middlewares/isAuth.js";
 
@@ -39,6 +40,8 @@ const router = express.Router();
 
 // ─── Public ───────────────────────────────────────────────────────────────────
 router.get("/", getAllProducts);
+router.get("/getCategoriesPromotion", getCategoriesPromotion)
+
 router.get("/categories", getCategories);
 router.get("/:slug", getProductById);
 router.get("/:id/variants", getProductVariants);

@@ -322,3 +322,27 @@ export const updateVariantStock = async (req, res) => {
         return sendError(res, err.message);
     }
 };
+
+
+
+
+// GET /api/categories for promotion ....
+// controllers/product.controller.js
+export const getCategoriesPromotion = async (req, res) => {
+    try {
+        const { search, isActive } = req.query;
+
+        // যদি ক্যাটাগরিগুলো প্রোডাক্ট মডেলের অংশ হয়:
+        let matchQuery = {};
+        if (isActive === "true") matchQuery.isActive = true;
+        if (search) matchQuery.name = { $regex: search, $options: "i" };
+
+        // যদি আলাদা ক্যাটাগরি কালেকশন থাকে:
+        const categories = await Product.find(matchQuery).select("_id name").limit(50);
+
+        res.status(200).json({ success: true, data: categories });
+    } catch (error) {
+        console.error("DEBUG - getCategoriesPromotion Error:", error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

@@ -171,26 +171,6 @@ async function runPromotionEngine(items, paymentMethod) {
     };
 }
 
-// ─── RECALCULATE & SAVE ───────────────────────────────────────────────────────
-// async function recalculate(cart, paymentMethod) {
-//     // ← KEY FIX: Mongoose subdocuments → plain objects BEFORE engine
-//     const plainItems = cart.items.map((item) => item.toObject ? item.toObject() : { ...item });
-
-//     const { enrichedItems, subtotal, discount, shippingFee, total } =
-//         await runPromotionEngine(plainItems, paymentMethod);
-
-//     // Write back to Mongoose document
-//     cart.items = enrichedItems;
-//     cart.subtotal = n(subtotal);
-//     cart.discount = n(discount);
-//     cart.shippingFee = n(shippingFee);
-//     cart.total = n(total);
-//     cart.totalItems = cart.items.reduce((s, i) => s + n(i.quantity), 0);
-//     cart.lastActivityAt = new Date();
-
-//     await cart.save();
-//     return cart;
-// }
 
 // ─── GET CART ─────────────────────────────────────────────────────────────────
 export const getCart = async (req, res) => {
@@ -449,6 +429,8 @@ export const mergeCart = async (req, res) => {
     }
 };
 
+
+
 // ─── APPLY COUPON ─────────────────────────────────────────────────────────────
 export const applyCoupon = async (req, res) => {
     try {
@@ -514,3 +496,14 @@ export const removeCoupon = async (req, res) => {
         return sendError(res, err.message);
     }
 };
+
+
+
+
+
+
+export const countCartitme = async (req, res) => {
+    const cart = await Cart.findOne({ user: req.user._id, isCheckedOut: false }).lean();
+    const count = cart?.items?.reduce((s, i) => s + (i.quantity || 0), 0) || 0;
+    res.json({ success: true, count });
+}
