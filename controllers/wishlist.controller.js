@@ -1,191 +1,98 @@
 import Wishlist from "../models/wishlist.model.js";
 import Product from "../models/product.model.js";
+import Cart from "../models/cart.modle.js";
 
-// ─── Helper: send error response ─────────────────────────────────────────────
 const sendError = (res, message, status = 500) =>
     res.status(status).json({ success: false, message });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET WISHLIST
-// Route: GET /api/wishlist
-// Who can use: logged-in user only
-// What it does: returns the user's full wishlist with product details
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── GET WISHLIST ──────────────────────────────────────────────────────────────
 export const getWishlist = async (req, res) => {
     try {
         const userId = req.user._id;
-
-        // Find this user's wishlist and fill in product details
         const wishlist = await Wishlist.findOne({ user: userId })
-            .populate(
-                "items.product",
-                "name slug images basePrice discountedPrice isActive category averageRating totalReviews"
-            )
+            .populate("items.product", "name slug images basePrice discountedPrice isActive category averageRating totalReviews")
             .lean();
 
-        // If no wishlist exists yet, return empty
-        if (!wishlist) {
-            return res.status(200).json({
-                success: true,
-                data: { items: [], totalItems: 0 },
-            });
-        }
-
+        if (!wishlist) return res.status(200).json({ success: true, data: { items: [], totalItems: 0 } });
         return res.status(200).json({ success: true, data: wishlist });
-    } catch (err) {
-        return sendError(res, err.message);
-    }
+    } catch (err) { return sendError(res, err.message); }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ADD TO WISHLIST
-// Route: POST /api/wishlist/add
-// Body: { productId, variantId?, note?, priority? }
-// What it does: adds a product to wishlist (ignores if already there)
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── ADD TO WISHLIST ───────────────────────────────────────────────────────────
 export const addToWishlist = async (req, res) => {
     try {
         const userId = req.user._id;
         const { productId, variantId = null, note = "", priority = 1 } = req.body;
 
-        // Validate required field
-        if (!productId) {
-            return sendError(res, "productId is required", 400);
-        }
+        if (!productId) return sendError(res, "productId is required", 400);
 
-        // Make sure the product exists and is active
         const product = await Product.findById(productId);
-        if (!product || !product.isActive) {
-            return sendError(res, "Product not found or inactive", 404);
-        }
+        if (!product || !product.isActive) return sendError(res, "Product not found or inactive", 404);
 
-        // Get the price to snapshot
         const priceAtAdd = product.discountedPrice ?? product.basePrice;
 
-        // Find or create wishlist for this user
         let wishlist = await Wishlist.findOne({ user: userId });
-        if (!wishlist) {
-            wishlist = new Wishlist({ user: userId, items: [] });
-        }
+        if (!wishlist) wishlist = new Wishlist({ user: userId, items: [] });
 
-        // Check if this product (+ variant) is already in the wishlist
-        const alreadyExists = wishlist.items.some((item) => {
+        const alreadyExists = wishlist.items.some(item => {
             const sameProduct = item.product.toString() === productId;
-            const sameVariant = variantId
-                ? item.variant?.toString() === variantId
-                : !item.variant;
+            const sameVariant = variantId ? item.variant?.toString() === variantId : !item.variant;
             return sameProduct && sameVariant;
         });
 
-        if (alreadyExists) {
-            return res.status(200).json({
-                success: true,
-                message: "Already in wishlist",
-                data: wishlist,
-            });
-        }
+        if (alreadyExists) return res.status(200).json({ success: true, message: "Already in wishlist", data: wishlist });
 
-        // Add the new item
-        wishlist.items.push({
-            product: productId,
-            variant: variantId,
-            note: note.trim(),
-            priority,
-            priceAtAdd,
-        });
+        wishlist.items.push({ product: productId, variant: variantId, note: note.trim(), priority, priceAtAdd });
+        await wishlist.save();
 
-        await wishlist.save(); // pre-save hook updates totalItems
-
-        return res.status(201).json({
-            success: true,
-            message: "Added to wishlist",
-            data: wishlist,
-        });
-    } catch (err) {
-        return sendError(res, err.message);
-    }
+        return res.status(201).json({ success: true, message: "Added to wishlist", data: wishlist });
+    } catch (err) { return sendError(res, err.message); }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// REMOVE FROM WISHLIST
-// Route: DELETE /api/wishlist/:productId
-// What it does: removes a product from wishlist
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── REMOVE FROM WISHLIST ──────────────────────────────────────────────────────
 export const removeFromWishlist = async (req, res) => {
     try {
         const userId = req.user._id;
         const { productId } = req.params;
 
         const wishlist = await Wishlist.findOne({ user: userId });
-        if (!wishlist) {
-            return sendError(res, "Wishlist not found", 404);
-        }
+        if (!wishlist) return sendError(res, "Wishlist not found", 404);
 
-        // Remove item that matches this product
         const beforeCount = wishlist.items.length;
-        wishlist.items = wishlist.items.filter(
-            (item) => item.product.toString() !== productId
-        );
+        wishlist.items = wishlist.items.filter(item => item.product.toString() !== productId);
 
-        // If nothing was removed, product wasn't in wishlist
-        if (wishlist.items.length === beforeCount) {
-            return sendError(res, "Product not in wishlist", 404);
-        }
+        if (wishlist.items.length === beforeCount) return sendError(res, "Product not in wishlist", 404);
 
         await wishlist.save();
-
-        return res.status(200).json({
-            success: true,
-            message: "Removed from wishlist",
-            data: wishlist,
-        });
-    } catch (err) {
-        return sendError(res, err.message);
-    }
+        return res.status(200).json({ success: true, message: "Removed from wishlist", data: wishlist });
+    } catch (err) { return sendError(res, err.message); }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TOGGLE WISHLIST  (add if not there, remove if already there)
-// Route: POST /api/wishlist/toggle
-// Body: { productId, variantId? }
-// What it does: one button handles both add and remove
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── TOGGLE WISHLIST ───────────────────────────────────────────────────────────
 export const toggleWishlist = async (req, res) => {
     try {
         const userId = req.user._id;
         const { productId, variantId = null } = req.body;
 
-        if (!productId) {
-            return sendError(res, "productId is required", 400);
-        }
+        if (!productId) return sendError(res, "productId is required", 400);
 
         const product = await Product.findById(productId);
-        if (!product || !product.isActive) {
-            return sendError(res, "Product not found", 404);
-        }
+        if (!product || !product.isActive) return sendError(res, "Product not found", 404);
 
         let wishlist = await Wishlist.findOne({ user: userId });
-        if (!wishlist) {
-            wishlist = new Wishlist({ user: userId, items: [] });
-        }
+        if (!wishlist) wishlist = new Wishlist({ user: userId, items: [] });
 
-        // Check if item is already in wishlist
-        const existingIndex = wishlist.items.findIndex((item) => {
+        const existingIndex = wishlist.items.findIndex(item => {
             const sameProduct = item.product.toString() === productId;
-            const sameVariant = variantId
-                ? item.variant?.toString() === variantId
-                : !item.variant;
+            const sameVariant = variantId ? item.variant?.toString() === variantId : !item.variant;
             return sameProduct && sameVariant;
         });
 
         let action;
-
         if (existingIndex > -1) {
-            // Already in wishlist → remove it
             wishlist.items.splice(existingIndex, 1);
             action = "removed";
         } else {
-            // Not in wishlist → add it
             wishlist.items.push({
                 product: productId,
                 variant: variantId,
@@ -195,23 +102,16 @@ export const toggleWishlist = async (req, res) => {
         }
 
         await wishlist.save();
-
         return res.status(200).json({
             success: true,
             message: action === "added" ? "Added to wishlist" : "Removed from wishlist",
             wishlisted: action === "added",
             data: wishlist,
         });
-    } catch (err) {
-        return sendError(res, err.message);
-    }
+    } catch (err) { return sendError(res, err.message); }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// UPDATE WISHLIST ITEM  (change note or priority)
-// Route: PATCH /api/wishlist/:productId
-// Body: { note?, priority? }
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── UPDATE WISHLIST ITEM ──────────────────────────────────────────────────────
 export const updateWishlistItem = async (req, res) => {
     try {
         const userId = req.user._id;
@@ -219,109 +119,122 @@ export const updateWishlistItem = async (req, res) => {
         const { note, priority } = req.body;
 
         const wishlist = await Wishlist.findOne({ user: userId });
-        if (!wishlist) {
-            return sendError(res, "Wishlist not found", 404);
-        }
+        if (!wishlist) return sendError(res, "Wishlist not found", 404);
 
-        // Find the item
-        const item = wishlist.items.find(
-            (i) => i.product.toString() === productId
-        );
-        if (!item) {
-            return sendError(res, "Product not in wishlist", 404);
-        }
+        const item = wishlist.items.find(i => i.product.toString() === productId);
+        if (!item) return sendError(res, "Product not in wishlist", 404);
 
-        // Update only the fields that were sent
         if (note !== undefined) item.note = note.trim();
         if (priority !== undefined) item.priority = priority;
 
         await wishlist.save();
-
-        return res.status(200).json({
-            success: true,
-            message: "Wishlist item updated",
-            data: wishlist,
-        });
-    } catch (err) {
-        return sendError(res, err.message);
-    }
+        return res.status(200).json({ success: true, message: "Wishlist item updated", data: wishlist });
+    } catch (err) { return sendError(res, err.message); }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CLEAR WISHLIST  (remove everything)
-// Route: DELETE /api/wishlist
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── CLEAR WISHLIST ────────────────────────────────────────────────────────────
 export const clearWishlist = async (req, res) => {
     try {
-        const userId = req.user._id;
-
-        await Wishlist.findOneAndDelete({ user: userId });
-
-        return res.status(200).json({
-            success: true,
-            message: "Wishlist cleared",
-        });
-    } catch (err) {
-        return sendError(res, err.message);
-    }
+        await Wishlist.findOneAndDelete({ user: req.user._id });
+        return res.status(200).json({ success: true, message: "Wishlist cleared" });
+    } catch (err) { return sendError(res, err.message); }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CHECK IF PRODUCT IS WISHLISTED
-// Route: GET /api/wishlist/check/:productId
-// Returns: { wishlisted: true/false }
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── CHECK IF WISHLISTED ───────────────────────────────────────────────────────
 export const checkWishlisted = async (req, res) => {
     try {
         const userId = req.user._id;
         const { productId } = req.params;
-
         const wishlist = await Wishlist.findOne({ user: userId }).lean();
-
-        const wishlisted = wishlist
-            ? wishlist.items.some((i) => i.product.toString() === productId)
-            : false;
-
+        const wishlisted = wishlist ? wishlist.items.some(i => i.product.toString() === productId) : false;
         return res.status(200).json({ success: true, wishlisted });
-    } catch (err) {
-        return sendError(res, err.message);
-    }
+    } catch (err) { return sendError(res, err.message); }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MOVE TO CART  (add to cart and remove from wishlist)
-// Route: POST /api/wishlist/move-to-cart/:productId
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── MOVE TO CART (with stock check) ──────────────────────────────────────────
 export const moveToCart = async (req, res) => {
     try {
         const userId = req.user._id;
         const { productId } = req.params;
+        const { quantity = 1 } = req.body;
+
+        // 1. Find product and check stock
+        const product = await Product.findById(productId);
+        if (!product || !product.isActive) return sendError(res, "Product not found or inactive", 404);
 
         const wishlist = await Wishlist.findOne({ user: userId });
         if (!wishlist) return sendError(res, "Wishlist not found", 404);
 
-        const item = wishlist.items.find(
-            (i) => i.product.toString() === productId
-        );
-        if (!item) return sendError(res, "Product not in wishlist", 404);
+        const wishlistItem = wishlist.items.find(i => i.product.toString() === productId);
+        if (!wishlistItem) return sendError(res, "Product not in wishlist", 404);
 
-        // Remove from wishlist
-        wishlist.items = wishlist.items.filter(
-            (i) => i.product.toString() !== productId
-        );
+        // 2. Stock check
+        let stock = null;
+        let price = Number(product.discountedPrice ?? product.basePrice);
+        let variantObjId = null;
+
+        if (product.hasVariants && wishlistItem.variant) {
+            const variant = product.variants.id(wishlistItem.variant);
+            if (!variant) return sendError(res, "Variant not found", 404);
+            stock = Number(variant.stock);
+            price = Number(variant.price);
+            variantObjId = variant._id;
+        } else {
+            // non-variant stock (if your model has it)
+            stock = product.stock !== undefined ? Number(product.stock) : null;
+        }
+
+        if (stock !== null && stock < 1) {
+            return res.status(400).json({
+                success: false,
+                outOfStock: true,
+                message: "This product is out of stock",
+            });
+        }
+
+        // 3. Add to cart
+        let cart = await Cart.findOne({ user: userId, isCheckedOut: false });
+        if (!cart) cart = new Cart({ user: userId });
+
+        const existingIdx = cart.items.findIndex(i => {
+            const sameProduct = i.product?.toString() === productId;
+            const sameVariant = variantObjId
+                ? i.variant?.toString() === variantObjId.toString()
+                : !i.variant;
+            return sameProduct && sameVariant;
+        });
+
+        const qty = Math.min(Number(quantity), stock ?? Infinity);
+
+        if (existingIdx > -1) {
+            const newQty = Number(cart.items[existingIdx].quantity) + qty;
+            cart.items[existingIdx].quantity = stock ? Math.min(newQty, stock) : newQty;
+        } else {
+            cart.items.push({
+                product: product._id,
+                variant: variantObjId,
+                nameSnapshot: product.name,
+                imageSnapshot: product.images?.[0] || "",
+                quantity: qty,
+                priceAtAdd: price,
+                finalPrice: price,
+                stockSnapshot: stock,
+                isAvailable: true,
+            });
+        }
+
+        cart.totalItems = cart.items.reduce((s, i) => s + Number(i.quantity), 0);
+        cart.lastActivityAt = new Date();
+        await cart.save();
+
+        // 4. Remove from wishlist
+        wishlist.items = wishlist.items.filter(i => i.product.toString() !== productId);
         await wishlist.save();
-
-        // NOTE: Actual cart add should be done from the frontend
-        // by calling POST /api/cart/add separately after this succeeds.
-        // This endpoint just removes the item from wishlist.
 
         return res.status(200).json({
             success: true,
-            message: "Moved to cart — please add to cart from frontend",
-            productId: item.product,
-            variantId: item.variant,
+            message: "Moved to cart",
+            productId: product._id,
         });
-    } catch (err) {
-        return sendError(res, err.message);
-    }
+    } catch (err) { return sendError(res, err.message); }
 };

@@ -10,7 +10,7 @@ const sendMail = async({ email,subject,html})=>{
         }
     })
   await transport.sendMail({
-    from:"ljlfd",
+    from:"Nova shop",
     to:email,
     subject,
     html,
