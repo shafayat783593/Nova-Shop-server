@@ -6,7 +6,6 @@ import { createClient } from "redis"
 import cookieParser from "cookie-parser"
 import getCloudinarySignature  from "./routers/cloudinarysignature.routes.js";
 import settingsRouter from "./routers/settings.routes.js"
-import shop from "./routers/shop.routes.js"
 import product from "./routers/product.routes.js"
 import bannerRoute from "./routers/admin.banner.routes.js"
 import promotionRoutes from "./routers/admin.promotion.routes.js"
@@ -48,7 +47,6 @@ const PORT = process.env.PORT || 5000
 
 app.use("/api/auth", userRouter)
 app.use("/api/settings", settingsRouter)
-app.use("/api/shop", shop)
 // app.use("/api/promotion", promotionRoutes);
 app.use("/api/cloudinary-sign", getCloudinarySignature);
 app.use("/api/products", product);
