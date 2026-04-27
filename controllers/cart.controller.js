@@ -430,8 +430,12 @@ export const mergeCart = async (req, res) => {
 };
 
 
-
 // ─── APPLY COUPON ─────────────────────────────────────────────────────────────
+// POST /api/cart/coupon
+// Body: { code: "SUMMER20" }
+//
+// FIXED: now looks up by couponCode field (not name), validates expiry,
+// usage limits, and minCartValue before applying.
 export const applyCoupon = async (req, res) => {
     try {
         const userId = req.user?._id;
@@ -440,65 +444,126 @@ export const applyCoupon = async (req, res) => {
 
         if (!code) return sendError(res, "Coupon code required", 400);
 
+        // ── Find cart ──────────────────────────────────────────────────────
         const cart = await Cart.findOne(
-            userId ? { user: userId, isCheckedOut: false } : { sessionId, isCheckedOut: false }
+            userId
+                ? { user: userId, isCheckedOut: false }
+                : { sessionId, isCheckedOut: false }
         );
         if (!cart) return sendError(res, "Cart not found", 404);
 
+        // ── Find promotion by couponCode ───────────────────────────────────
+        const now = new Date();
         const promo = await Promotion.findOne({
-            name: code.trim().toUpperCase(),
+            couponCode: code.trim().toUpperCase(),
             isActive: true,
+            $or: [{ startDate: { $exists: false } }, { startDate: { $lte: now } }],
+            $and: [{ $or: [{ endDate: { $exists: false } }, { endDate: { $gte: now } }] }],
         });
-        if (!promo) return sendError(res, "Invalid coupon code", 404);
-        if (promo.usageLimit && promo.usedCount >= promo.usageLimit)
-            return sendError(res, "Coupon usage limit reached", 400);
 
+        if (!promo) return sendError(res, "Invalid or expired coupon code", 404);
+
+        // ── Usage limit ────────────────────────────────────────────────────
+        if (promo.usageLimit && promo.usedCount >= promo.usageLimit) {
+            return sendError(res, "This coupon has reached its usage limit", 400);
+        }
+
+        // ── Min cart value check ───────────────────────────────────────────
+        const cartSubtotal = n(cart.subtotal);
+        if (
+            promo.conditions?.minCartValue &&
+            cartSubtotal < n(promo.conditions.minCartValue)
+        ) {
+            return sendError(
+                res,
+                `Minimum cart value of ৳${promo.conditions.minCartValue} required`,
+                400
+            );
+        }
+
+        // ── Already has a coupon? remove old one first ─────────────────────
+        if (cart.appliedCoupon?.code) {
+            const oldDiscount = n(cart.appliedCoupon.discountAmount);
+            cart.discount = Math.max(0, n(cart.discount) - oldDiscount);
+            cart.total = n(cart.total) + oldDiscount;
+        }
+
+        // ── Calculate discount ─────────────────────────────────────────────
         let discountAmount = 0;
-        if (promo.discountType === "percent")
-            discountAmount = (n(cart.subtotal) * n(promo.value)) / 100;
-        else if (promo.discountType === "fixed")
-            discountAmount = Math.min(n(promo.value), n(cart.subtotal));
 
-        discountAmount = n(discountAmount);
+        if (promo.discountType === "percent") {
+            discountAmount = (cartSubtotal * n(promo.value)) / 100;
+        } else if (promo.discountType === "fixed") {
+            discountAmount = Math.min(n(promo.value), cartSubtotal);
+        } else if (promo.discountType === "free") {
+            discountAmount = cartSubtotal;
+        }
 
-        cart.appliedCoupon = { code: code.trim().toUpperCase(), discountAmount };
+        discountAmount = Math.max(0, n(discountAmount));
+
+        // ── Apply to cart ──────────────────────────────────────────────────
+        cart.appliedCoupon = {
+            code: promo.couponCode,
+            promotionId: promo._id,
+            discountAmount,
+        };
         cart.discount = n(cart.discount) + discountAmount;
         cart.total = Math.max(0, n(cart.total) - discountAmount);
         cart.lastActivityAt = new Date();
         await cart.save();
 
-        return res.status(200).json({ success: true, message: "Coupon applied", data: cart.toObject() });
+        // ── Increment usedCount ────────────────────────────────────────────
+        await Promotion.findByIdAndUpdate(promo._id, { $inc: { usedCount: 1 } });
+
+        return res.status(200).json({
+            success: true,
+            message: `Coupon "${promo.couponCode}" applied! You saved ৳${discountAmount.toFixed(0)}`,
+            data: cart.toObject(),
+        });
     } catch (err) {
         return sendError(res, err.message);
     }
 };
 
 // ─── REMOVE COUPON ────────────────────────────────────────────────────────────
+// DELETE /api/cart/coupon
 export const removeCoupon = async (req, res) => {
     try {
         const userId = req.user?._id;
         const sessionId = req.headers["x-session-id"];
 
         const cart = await Cart.findOne(
-            userId ? { user: userId, isCheckedOut: false } : { sessionId, isCheckedOut: false }
+            userId
+                ? { user: userId, isCheckedOut: false }
+                : { sessionId, isCheckedOut: false }
         );
         if (!cart) return sendError(res, "Cart not found", 404);
 
-        const couponDiscount = n(cart.appliedCoupon?.discountAmount);
+        if (!cart.appliedCoupon?.code) {
+            return sendError(res, "No coupon applied", 400);
+        }
+
+        const couponDiscount = n(cart.appliedCoupon.discountAmount);
+
+        // Decrement usedCount back (coupon removed before checkout)
+        if (cart.appliedCoupon.promotionId) {
+            await Promotion.findByIdAndUpdate(cart.appliedCoupon.promotionId, {
+                $inc: { usedCount: -1 },
+            });
+        }
+
         cart.discount = Math.max(0, n(cart.discount) - couponDiscount);
         cart.total = n(cart.total) + couponDiscount;
         cart.appliedCoupon = undefined;
         cart.lastActivityAt = new Date();
         await cart.save();
 
-        return res.status(200).json({ success: true, message: "Coupon removed", data: cart.toObject() });
+        return res.status(200).json({
+            success: true,
+            message: "Coupon removed",
+            data: cart.toObject(),
+        });
     } catch (err) {
         return sendError(res, err.message);
     }
 };
-
-
-
-
-
-
