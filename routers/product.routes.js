@@ -33,6 +33,7 @@ import {
     getProductVariants,
     updateVariantStock,
     getCategoriesPromotion,
+    getCategoriesWithImages,
 } from "../controllers/product.controller.js";
 import { authorizeAdmin, isAuth } from "../middlewares/isAuth.js";
 
@@ -40,7 +41,8 @@ const router = express.Router();
 
 // ─── Public ───────────────────────────────────────────────────────────────────
 router.get("/", getAllProducts);
-router.get("/getCategoriesPromotion", getCategoriesPromotion)
+router.get("/getCategoriesPromotion", getCategoriesPromotion);
+router.get("/categories-with-images", getCategoriesWithImages);
 
 router.get("/categories", getCategories);
 router.get("/:slug", getProductById);
@@ -53,5 +55,6 @@ router.delete("/:id", isAuth, authorizeAdmin, deleteProduct);
 router.patch("/:id/toggle", isAuth, authorizeAdmin, toggleProductStatus);
 router.patch("/:id/feature", isAuth, authorizeAdmin, toggleFeatured);
 router.patch("/:id/variants/:variantId/stock", isAuth, authorizeAdmin, updateVariantStock);
+
 
 export default router;

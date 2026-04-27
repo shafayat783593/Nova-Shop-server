@@ -346,3 +346,53 @@ export const getCategoriesPromotion = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+
+
+
+
+
+export const getCategoriesWithImages = async (req, res) => {
+    try {
+        const categories = await Product.aggregate([
+            // Only active products with at least one image
+            {
+                $match: {
+                    isActive: true,
+                    images: { $exists: true, $not: { $size: 0 } },
+                    category: { $exists: true, $ne: "" },
+                },
+            },
+            // Sort so featured products come first (better representative image)
+            { $sort: { isFeatured: -1, averageRating: -1, createdAt: -1 } },
+            // Group by category
+            {
+                $group: {
+                    _id: "$category",
+                    image: { $first: { $arrayElemAt: ["$images", 0] } },
+                    productCount: { $sum: 1 },
+                    // Grab up to 4 extra images for the mosaic effect
+                    extraImages: { $push: { $arrayElemAt: ["$images", 0] } },
+                    topProduct: { $first: "$name" },
+                },
+            },
+            // Clean up extraImages to max 4
+            {
+                $project: {
+                    _id: 0,
+                    name: "$_id",
+                    image: 1,
+                    productCount: 1,
+                    extraImages: { $slice: ["$extraImages", 1, 3] },
+                    topProduct: 1,
+                },
+            },
+            { $sort: { productCount: -1 } },
+        ]);
+
+        return res.status(200).json({ success: true, data: categories });
+    } catch (err) {
+        console.error("getCategoriesWithImages error:", err);
+        return res.status(500).json({ success: false, message: err.message });
+    }
+};
