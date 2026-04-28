@@ -94,36 +94,36 @@ export const authorizeVendor = async (req, res, next) => {
 
 
 
-export const optionalAuth = async (req, res, next) => {
-    try {
-        // isAuth এর মতোই cookie থেকে token নাও
-        const token = req.cookies.accessToken;
-        if (!token) return next(); // token নেই → guest, block করো না
+// export const optionalAuth = async (req, res, next) => {
+//     try {
+//         // isAuth এর মতোই cookie থেকে token নাও
+//         const token = req.cookies.accessToken;
+//         if (!token) return next(); // token নেই → guest, block করো না
 
-        const userData = jwt.verify(token, process.env.JWT_SECRET);
-        if (!userData) return next();
+//         const userData = jwt.verify(token, process.env.JWT_SECRET);
+//         if (!userData) return next();
 
-        // Session active কিনা check করো
-        const sessionActive = await isSessionActive(userData.id, userData.sessionId);
-        if (!sessionActive) return next(); // session নেই → guest হিসেবে চালাও
+//         // Session active কিনা check করো
+//         const sessionActive = await isSessionActive(userData.id, userData.sessionId);
+//         if (!sessionActive) return next(); // session নেই → guest হিসেবে চালাও
 
-        // Redis cache check
-        const cachedUser = await redisClint.get(`user:${userData.id}`);
-        if (cachedUser) {
-            req.user = JSON.parse(cachedUser);
-            req.sessionId = userData.sessionId;
-            return next();
-        }
+//         // Redis cache check
+//         const cachedUser = await redisClint.get(`user:${userData.id}`);
+//         if (cachedUser) {
+//             req.user = JSON.parse(cachedUser);
+//             req.sessionId = userData.sessionId;
+//             return next();
+//         }
 
-        // DB থেকে আনো
-        const user = await User.findById(userData.id).select("-password");
-        if (user) {
-            await redisClint.setEx(`user:${user._id}`, 3600, JSON.stringify(user));
-            req.user = user;
-            req.sessionId = userData.sessionId;
-        }
-    } catch {
-        // যেকোনো error → guest হিসেবে চালাও, block করো না
-    }
-    next();
-};
+//         // DB থেকে আনো
+//         const user = await User.findById(userData.id).select("-password");
+//         if (user) {
+//             await redisClint.setEx(`user:${user._id}`, 3600, JSON.stringify(user));
+//             req.user = user;
+//             req.sessionId = userData.sessionId;
+//         }
+//     } catch {
+//         // যেকোনো error → guest হিসেবে চালাও, block করো না
+//     }
+//     next();
+// };

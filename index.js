@@ -12,6 +12,8 @@ import promotionRoutes from "./routers/admin.promotion.routes.js"
 import cartRouter from "./routers/cart.routes.js"
 import wishlistRouter from "./routers/wishlist.routes.js"
 import cors from "cors"
+import { paymentRouter } from "./routers/payment.routes.js"
+import  addressRouter  from ".//routers/address.routes.js"
 dotenv.config()
 await connectDb()
 
@@ -54,6 +56,8 @@ app.use("/api/banners", bannerRoute);
 app.use("/api/promotions",promotionRoutes);
 app.use("/api/product/cart", cartRouter);
 app.use("/api/wishlist", wishlistRouter);
+app.use("/api/payments", paymentRouter);
+app.use("/api/addresses", addressRouter);
 
 app.listen(PORT, () => {
     console.log(`server is running on the port ${PORT}`)
