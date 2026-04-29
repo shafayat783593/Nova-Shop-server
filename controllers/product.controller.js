@@ -190,10 +190,22 @@ export const getAllProducts = async (req, res) => {
 
 // ─── GET ONE BY SLUG ──────────────────────────────────────────────────────────
 // GET /api/products/:slug
+// GET /api/products/:slug_or_id
 export const getProductById = async (req, res) => {
     try {
         const { slug } = req.params;
-        const product = await Product.findOne({ slug }).lean();
+
+        // Check if the param is a valid MongoDB ObjectID
+        const isId = mongoose.Types.ObjectId.isValid(slug);
+
+        let product;
+        if (isId) {
+            // If it's an ID, search by _id
+            product = await Product.findById(slug).lean();
+        } else {
+            // If it's not an ID, search by slug
+            product = await Product.findOne({ slug }).lean();
+        }
 
         if (!product) return sendError(res, "Product not found", 404);
 

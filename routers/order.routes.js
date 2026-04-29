@@ -10,6 +10,7 @@ import {
     adminUpdateOrderStatus,
     adminAssignDeliveryBoy,
     adminGetOrderStats,
+    buyNow,
 } from "../controllers/order.controller.js";
 import { authorizeAdmin, isAuth } from "../middlewares/isAuth.js";
 
@@ -17,8 +18,12 @@ const orderRouter = express.Router();
 
 // ── Customer routes ───────────────────────────────────────────────────────────
 orderRouter.post("/", isAuth, placeOrder);
+orderRouter.post("/buy-now", isAuth, buyNow);   // ← নতুন route
+
 orderRouter.get("/my", isAuth, getMyOrders);
+
 orderRouter.get("/:orderId", isAuth, getOrderById);
+
 orderRouter.patch("/:orderId/cancel", isAuth, cancelOrder);
 
 // ── Admin routes ──────────────────────────────────────────────────────────────

@@ -137,6 +137,125 @@ export const placeOrder = async (req, res) => {
     }
 };
 
+
+
+
+
+
+// ─── BUY NOW (Cart ছাড়া direct order) ────────────────────────────────────────
+// POST /api/orders/buy-now
+// Body: { productId, variantId?, quantity, shippingAddressId, paymentMethod, customerNote? }
+export const buyNow = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const {
+            productId, variantId, quantity = 1,
+            shippingAddressId, shippingAddress,
+            paymentMethod, customerNote,
+        } = req.body;
+
+        if (!productId) return sendError(res, "productId is required", 400);
+        if (!paymentMethod) return sendError(res, "paymentMethod is required", 400);
+        if (!shippingAddressId && !shippingAddress) {
+            return sendError(res, "Shipping address is required", 400);
+        }
+
+        // ── Resolve address ────────────────────────────────────────────────
+        let resolvedAddress;
+        if (shippingAddressId) {
+            const saved = await Address.findOne({ _id: shippingAddressId, user: userId }).lean();
+            if (!saved) return sendError(res, "Address not found", 404);
+            resolvedAddress = saved;
+        } else {
+            resolvedAddress = shippingAddress;
+        }
+
+        // ── Load product ───────────────────────────────────────────────────
+        const product = await Product.findById(productId);
+        if (!product || !product.isActive) {
+            return sendError(res, "Product is not available", 400);
+        }
+
+        // ── Validate stock & price ─────────────────────────────────────────
+        let priceAtOrder = product.discountedPrice ?? product.basePrice;
+        let finalPrice = priceAtOrder;
+
+        if (product.hasVariants && variantId) {
+            const variant = product.variants.id(variantId);
+            if (!variant) return sendError(res, "Variant not found", 404);
+            if (variant.stock < quantity) {
+                return sendError(res, `Only ${variant.stock} items left in stock`, 400);
+            }
+            priceAtOrder = variant.price ?? priceAtOrder;
+            finalPrice = priceAtOrder;
+
+            // Decrement stock
+            variant.stock -= quantity;
+            await product.save();
+        }
+
+        // ── Build order ────────────────────────────────────────────────────
+        const subtotal = finalPrice * quantity;
+        const shippingFee = subtotal >= 500 ? 0 : 80;
+        const total = subtotal + shippingFee;
+
+        const order = new Order({
+            user: userId || null,
+            items: [{
+                product: product._id,
+                variant: variantId || null,
+                nameSnapshot: product.name,
+                imageSnapshot: product.images?.[0] || "",
+                priceAtOrder,
+                finalPrice,
+                quantity,
+                appliedPromotions: [],
+            }],
+            shippingAddress: {
+                fullName: resolvedAddress.fullName,
+                phone: resolvedAddress.phone,
+                addressLine: resolvedAddress.addressLine,
+                area: resolvedAddress.area,
+                district: resolvedAddress.district,
+                division: resolvedAddress.division,
+                postalCode: resolvedAddress.postalCode || "",
+            },
+            paymentMethod,
+            paymentStatus: "pending",
+            subtotal,
+            discount: 0,
+            shippingFee,
+            total,
+            customerNote: customerNote || "",
+        });
+
+        pushTimeline(order, "pending", "Order placed via Buy Now", userId);
+        await order.save();
+
+        // ── Notify admin ───────────────────────────────────────────────────
+        const io = getIO();
+        io.to("adminRoom").emit("order:new", {
+            orderId: order.orderId,
+            _id: order._id,
+            total: order.total,
+            createdAt: order.createdAt,
+        });
+
+        return res.status(201).json({
+            success: true,
+            message: "Order placed successfully",
+            data: {
+                orderId: order.orderId,
+                _id: order._id,
+                paymentMethod: order.paymentMethod,
+                total: order.total,
+            },
+        });
+    } catch (err) {
+        console.error("BuyNow Error:", err);
+        return sendError(res, err.message);
+    }
+};
 // ─── GET MY ORDERS (customer) ─────────────────────────────────────────────────
 // GET /api/orders/my?page=1&limit=10&status=pending
 export const getMyOrders = async (req, res) => {
