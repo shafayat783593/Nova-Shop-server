@@ -1,21 +1,26 @@
 import express from "express";
 import {
+    getLocationData,
     getMyAddresses,
     addAddress,
     updateAddress,
     deleteAddress,
     setDefaultAddress,
 } from "../controllers/address.controller.js";
-import { protect } from "../middleware/auth.middleware.js";
+import { isAuth } from "../middlewares/isAuth.js";
 
-const router = express.Router();
+const addressRouter = express.Router();
 
-router.use(protect); // All address routes require login
+// Public — frontend uses this to populate division/district/upazila dropdowns
+addressRouter.get("/location-data", getLocationData);
 
-router.get("/", getMyAddresses);
-router.post("/", addAddress);
-router.put("/:id", updateAddress);
-router.delete("/:id", deleteAddress);
-router.patch("/:id/default", setDefaultAddress);
+// All below require login
+addressRouter.use(isAuth);
 
-export default router;
+addressRouter.get("/", getMyAddresses);
+addressRouter.post("/", addAddress);
+addressRouter.put("/:id", updateAddress);
+addressRouter.delete("/:id", deleteAddress);
+addressRouter.patch("/:id/default", setDefaultAddress);
+
+export default addressRouter;

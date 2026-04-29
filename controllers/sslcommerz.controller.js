@@ -1,7 +1,7 @@
 import SSLCommerzPayment from "sslcommerz-lts";
 import Order from "../models/order.model.js";
-import { sendInvoiceEmail } from "../services/invoice.service.js";
-import { getIO } from "../socket.js";
+import { sendInvoiceEmail } from "../utils/Invoice.service.js";
+import { getIO } from "../socket/socket.js";
 
 const IS_SANDBOX = process.env.NODE_ENV !== "production";
 const STORE_ID = process.env.STORE_ID;

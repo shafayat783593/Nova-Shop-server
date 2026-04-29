@@ -1,7 +1,7 @@
 import axios from "axios";
 import Order from "../models/order.model.js";
-import { sendInvoiceEmail } from "../services/invoice.service.js";
-import { getIO } from "../socket.js";
+import { sendInvoiceEmail } from "../utils/Invoice.service.js";
+import { getIO } from "../socket/socket.js";
 
 // ─── bKash credentials from environment ──────────────────────────────────────
 const BKASH = {

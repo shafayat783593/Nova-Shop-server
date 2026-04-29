@@ -1,9 +1,6 @@
 import mongoose from "mongoose";
-import {
-    isValidDivision,
-    isValidDistrict,
-    getDivisionOfDistrict,
-} from "@bangladeshi/bangladesh-address";
+import { isValidDivision, isValidDistrict, getDivisionOfDistrict }
+    from "../utils/bangladeshAddress.js";
 
 const addressSchema = new mongoose.Schema(
     {
@@ -59,9 +56,10 @@ const addressSchema = new mongoose.Schema(
 );
 
 // ─── Cross-field: district must belong to selected division ──────────────────
-addressSchema.pre("validate", function (next) {
+addressSchema.pre("validate", function () {
     if (this.district && this.division) {
         const actualDivision = getDivisionOfDistrict(this.district);
+
         if (actualDivision && actualDivision !== this.division) {
             this.invalidate(
                 "district",
@@ -69,18 +67,16 @@ addressSchema.pre("validate", function (next) {
             );
         }
     }
-    next();
 });
 
 // ─── Only one default address per user ───────────────────────────────────────
-addressSchema.pre("save", async function (next) {
+addressSchema.pre("save", async function () {
     if (this.isDefault && this.isModified("isDefault")) {
         await this.constructor.updateMany(
             { user: this.user, _id: { $ne: this._id } },
             { isDefault: false }
         );
     }
-    next();
 });
 
 export default mongoose.model("Address", addressSchema);

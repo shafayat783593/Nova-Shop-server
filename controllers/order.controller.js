@@ -4,7 +4,7 @@ import Product from "../models/product.model.js";
 import DeliveryBoy from "../models/deliveryBoy.model.js";
 import { sendInvoiceEmail } from "../services/invoice.service.js";
 import { getIO } from "../socket.js";
-import address from("../models/address.model.js");
+import address from"../models/address.model.js";
 const sendError = (res, message, status = 500) =>
     res.status(status).json({ success: false, message });
 

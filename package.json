@@ -13,6 +13,7 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@bangladeshi/bangladesh-address": "^2.1.0",
     "axios": "^1.15.2",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.9.0",
