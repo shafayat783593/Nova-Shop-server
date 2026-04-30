@@ -26,6 +26,7 @@
     "mongoose": "^9.0.1",
     "nanoid": "^5.1.9",
     "nodemailer": "^7.0.13",
+    "puppeteer-core": "^24.42.0",
     "redis": "^5.10.0",
     "slugify": "^1.6.9",
     "socket.io": "^4.8.3",

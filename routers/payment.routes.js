@@ -9,6 +9,7 @@ import {
     sslcommerzIPN,
 } from "../controllers/sslcommerz.controller.js";
 import { isAuth } from "../middlewares/isAuth.js";
+import { retryPayment } from "../controllers/order.controller.js";
 
 const paymentRouter = express.Router();
 
@@ -17,10 +18,13 @@ paymentRouter.post("/bkash/create", isAuth, bkashCreatePayment);
 paymentRouter.get("/bkash/callback", bkashCallback);     // bKash redirects here
 
 // ── SSLCommerz ────────────────────────────────────────────────────────────────
+paymentRouter.post("/retry", isAuth, retryPayment);
 paymentRouter.post("/sslcommerz/init", isAuth, sslcommerzInit);
 paymentRouter.post("/sslcommerz/success", sslcommerzSuccess);
 paymentRouter.post("/sslcommerz/fail", sslcommerzFail);
 paymentRouter.post("/sslcommerz/cancel", sslcommerzCancel);
 paymentRouter.post("/sslcommerz/ipn", sslcommerzIPN);
+
+
 
 export { paymentRouter };

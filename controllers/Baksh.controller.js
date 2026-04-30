@@ -1,6 +1,6 @@
 import axios from "axios";
 import Order from "../models/order.model.js";
-import { sendInvoiceEmail } from "../utils/Invoice.service.js";
+import { sendInvoiceEmail } from "../services/invoice.service.js";
 import { getIO } from "../socket/socket.js";
 
 const sendError = (res, message, status = 500) =>
@@ -155,7 +155,8 @@ export const bkashCallback = async (req, res) => {
             message: "Payment confirmed! Your order is being processed.",
         });
 
-        await sendInvoiceEmail(order).catch(console.error);
+        const userEmail = order.user?.email || "";
+        await sendInvoiceEmail(order, userEmail).catch(console.error);
         order.invoiceSentAt = new Date();
         await order.save();
 
@@ -165,3 +166,7 @@ export const bkashCallback = async (req, res) => {
         return res.redirect(`${FAIL_URL}?reason=server_error`);
     }
 };
+
+
+// POST /api/payments/retry
+// Body: { orderId: "ORD-XXXXXX" }

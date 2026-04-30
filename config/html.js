@@ -619,3 +619,321 @@ export const sendStockNotificationMail = async ({ email, userName, product }) =>
         html,
     });
 };
+
+
+
+
+
+
+
+
+
+
+export function buildInvoiceHTML(data) {
+  const {
+    invoiceNo,
+    dateIssued = new Date(),
+    dueDate,
+    paymentStatus = "paid",
+    customerName = "",
+    customerEmail = "",
+    customerPhone = "",
+    customerAddress = "",
+    items = [],
+    subtotal = 0,
+    discount = 0,
+    shippingFee = 0,
+    total = 0,
+    paymentMethod = "",
+    transactionId = null,
+    paidAt = null,
+  } = data;
+
+  const fmt = (n) => Number(n || 0).toFixed(2);
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
+  const statusColor = paymentStatus === "paid"
+    ? "#16a34a"
+    : paymentStatus === "failed"
+      ? "#dc2626"
+      : "#d97706";
+
+  const statusBg = paymentStatus === "paid"
+    ? "#dcfce7"
+    : paymentStatus === "failed"
+      ? "#fee2e2"
+      : "#fef9c3";
+
+  const statusLabel = paymentStatus === "paid" ? "PAID" : paymentStatus === "failed" ? "FAILED" : "PENDING";
+
+  const itemRows = items.map((item, i) => `
+        <tr style="background: ${i % 2 === 0 ? "#ffffff" : "#fafafa"};">
+            <td style="padding: 14px 20px; border-bottom: 1px solid #f1f5f9; font-size: 13px; color: #334155;">
+                <div style="font-weight: 600; color: #0f172a;">${item.name || ""}</div>
+                ${item.description ? `<div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">${item.description}</div>` : ""}
+            </td>
+            <td style="padding: 14px 20px; border-bottom: 1px solid #f1f5f9; text-align: center; font-size: 13px; color: #475569;">${item.quantity}</td>
+            <td style="padding: 14px 20px; border-bottom: 1px solid #f1f5f9; text-align: right; font-size: 13px; color: #475569;">৳${fmt(item.unitPrice)}</td>
+            <td style="padding: 14px 20px; border-bottom: 1px solid #f1f5f9; text-align: right; font-size: 13px; font-weight: 700; color: #0f172a;">৳${fmt(item.amount)}</td>
+        </tr>
+    `).join("");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Invoice ${invoiceNo}</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+        background: #ffffff;
+        color: #334155;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+    .page {
+        max-width: 794px;
+        margin: 0 auto;
+        background: #ffffff;
+        min-height: 1123px;
+        display: flex;
+        flex-direction: column;
+    }
+</style>
+</head>
+<body>
+<div class="page">
+ 
+    <!-- ── Header ──────────────────────────────────────────── -->
+    <div style="
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f172a 100%);
+        padding: 40px 48px 36px;
+        position: relative;
+        overflow: hidden;
+    ">
+        <!-- Decorative circle -->
+        <div style="
+            position: absolute; top: -40px; right: -40px;
+            width: 200px; height: 200px;
+            border-radius: 50%;
+            background: rgba(239,68,68,0.12);
+        "></div>
+        <div style="
+            position: absolute; bottom: -30px; left: 30%;
+            width: 120px; height: 120px;
+            border-radius: 50%;
+            background: rgba(239,68,68,0.06);
+        "></div>
+ 
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; position: relative; z-index: 1;">
+            <!-- Brand -->
+            <div>
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                    <div style="
+                        width: 42px; height: 42px;
+                        background: linear-gradient(135deg, #ef4444, #dc2626);
+                        border-radius: 12px;
+                        display: flex; align-items: center; justify-content: center;
+                        font-size: 20px; font-weight: 900; color: white;
+                        letter-spacing: -1px;
+                    ">N</div>
+                    <span style="font-size: 22px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">Nova Shop</span>
+                </div>
+                <p style="color: #94a3b8; font-size: 12px; margin-top: 4px;">Nova Shop Platform, Bangladesh</p>
+                <p style="color: #94a3b8; font-size: 12px;">support@novashop.com</p>
+            </div>
+ 
+            <!-- Invoice title & status -->
+            <div style="text-align: right;">
+                <div style="font-size: 28px; font-weight: 900; color: #ffffff; letter-spacing: -1px;">INVOICE</div>
+                <div style="color: #ef4444; font-size: 15px; font-weight: 700; margin-top: 2px;">#${invoiceNo}</div>
+                <div style="
+                    display: inline-block;
+                    margin-top: 10px;
+                    background: ${statusBg};
+                    color: ${statusColor};
+                    font-size: 11px; font-weight: 800;
+                    padding: 4px 14px;
+                    border-radius: 20px;
+                    letter-spacing: 1px;
+                ">${statusLabel}</div>
+            </div>
+        </div>
+ 
+        <!-- Date row -->
+        <div style="
+            display: flex; gap: 32px;
+            margin-top: 28px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            position: relative; z-index: 1;
+        ">
+            <div>
+                <div style="font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Date Issued</div>
+                <div style="color: #e2e8f0; font-size: 13px; font-weight: 600; margin-top: 3px;">${fmtDate(dateIssued)}</div>
+            </div>
+            ${dueDate ? `
+            <div>
+                <div style="font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Due Date</div>
+                <div style="color: #e2e8f0; font-size: 13px; font-weight: 600; margin-top: 3px;">${fmtDate(dueDate)}</div>
+            </div>
+            ` : ""}
+            ${paidAt ? `
+            <div>
+                <div style="font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Paid On</div>
+                <div style="color: #86efac; font-size: 13px; font-weight: 600; margin-top: 3px;">${fmtDate(paidAt)}</div>
+            </div>
+            ` : ""}
+        </div>
+    </div>
+ 
+    <!-- ── Bill To / Payment Details ───────────────────────── -->
+    <div style="display: flex; gap: 0; border-bottom: 1px solid #f1f5f9;">
+ 
+        <!-- Bill To -->
+        <div style="flex: 1; padding: 28px 48px; border-right: 1px solid #f1f5f9;">
+            <div style="font-size: 10px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px;">Invoice To</div>
+            <div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 4px;">${customerName || "Customer"}</div>
+            ${customerPhone ? `<div style="font-size: 12px; color: #64748b; margin-bottom: 2px;">📞 ${customerPhone}</div>` : ""}
+            ${customerEmail ? `<div style="font-size: 12px; color: #64748b; margin-bottom: 2px;">✉️ ${customerEmail}</div>` : ""}
+            ${customerAddress ? `<div style="font-size: 12px; color: #64748b; margin-top: 6px; line-height: 1.5;">📍 ${customerAddress}</div>` : ""}
+        </div>
+ 
+        <!-- Payment Details -->
+        <div style="flex: 1; padding: 28px 48px;">
+            <div style="font-size: 10px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px;">Payment Details</div>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="font-size: 12px; color: #64748b; padding: 3px 0;">Invoice Currency</td>
+                    <td style="font-size: 12px; color: #0f172a; font-weight: 600; text-align: right;">BDT</td>
+                </tr>
+                <tr>
+                    <td style="font-size: 12px; color: #64748b; padding: 3px 0;">Invoice Amount</td>
+                    <td style="font-size: 12px; color: #0f172a; font-weight: 600; text-align: right;">৳${fmt(total)} BDT</td>
+                </tr>
+                <tr>
+                    <td style="font-size: 12px; color: #64748b; padding: 3px 0;">Payment Method</td>
+                    <td style="font-size: 12px; color: #0f172a; font-weight: 600; text-align: right; text-transform: uppercase;">${paymentMethod}</td>
+                </tr>
+                <tr>
+                    <td style="font-size: 12px; color: #64748b; padding: 3px 0;">Payment Status</td>
+                    <td style="text-align: right;">
+                        <span style="font-size: 11px; font-weight: 700; color: ${statusColor};">${statusLabel}</span>
+                    </td>
+                </tr>
+                ${paymentStatus === "paid" ? `
+                <tr style="border-top: 1px solid #f1f5f9;">
+                    <td style="font-size: 12px; color: #16a34a; font-weight: 700; padding: 5px 0;">Total Due</td>
+                    <td style="font-size: 13px; color: #16a34a; font-weight: 800; text-align: right;">৳0.00</td>
+                </tr>
+                ` : `
+                <tr style="border-top: 1px solid #f1f5f9;">
+                    <td style="font-size: 12px; color: #d97706; font-weight: 700; padding: 5px 0;">Total Due</td>
+                    <td style="font-size: 13px; color: #d97706; font-weight: 800; text-align: right;">৳${fmt(total)} BDT</td>
+                </tr>
+                `}
+            </table>
+        </div>
+    </div>
+ 
+    <!-- ── Items Table ──────────────────────────────────────── -->
+    <div style="padding: 0 0; flex: 1;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background: #f8fafc;">
+                    <th style="padding: 14px 20px; text-align: left; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #e2e8f0;">Description</th>
+                    <th style="padding: 14px 20px; text-align: center; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #e2e8f0;">Qty</th>
+                    <th style="padding: 14px 20px; text-align: right; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #e2e8f0;">Unit Price</th>
+                    <th style="padding: 14px 20px; text-align: right; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #e2e8f0;">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${itemRows}
+            </tbody>
+        </table>
+ 
+        <!-- ── Totals ── -->
+        <div style="display: flex; justify-content: flex-end; padding: 20px 20px 0;">
+            <div style="width: 280px;">
+                <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
+                    <span style="font-size: 13px; color: #64748b;">Subtotal</span>
+                    <span style="font-size: 13px; color: #0f172a; font-weight: 600;">৳${fmt(subtotal)}</span>
+                </div>
+                ${discount > 0 ? `
+                <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
+                    <span style="font-size: 13px; color: #16a34a;">Discount</span>
+                    <span style="font-size: 13px; color: #16a34a; font-weight: 600;">-৳${fmt(discount)}</span>
+                </div>
+                ` : ""}
+                <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
+                    <span style="font-size: 13px; color: #64748b;">Shipping</span>
+                    <span style="font-size: 13px; color: ${shippingFee === 0 ? "#16a34a" : "#0f172a"}; font-weight: 600;">${shippingFee === 0 ? "Free" : `৳${fmt(shippingFee)}`}</span>
+                </div>
+                ${paymentStatus === "paid" ? `
+                <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
+                    <span style="font-size: 13px; color: #16a34a;">Paid</span>
+                    <span style="font-size: 13px; color: #16a34a; font-weight: 600;">(-) ৳${fmt(total)}</span>
+                </div>
+                ` : ""}
+                <div style="
+                    display: flex; justify-content: space-between;
+                    padding: 12px 16px; margin-top: 8px;
+                    background: linear-gradient(135deg, #0f172a, #1e293b);
+                    border-radius: 12px;
+                ">
+                    <span style="font-size: 14px; color: #ffffff; font-weight: 700;">Total</span>
+                    <span style="font-size: 16px; color: #ef4444; font-weight: 900;">৳${paymentStatus === "paid" ? "0.00" : fmt(total)}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+ 
+    <!-- ── Transactions ─────────────────────────────────────── -->
+    ${transactionId ? `
+    <div style="padding: 24px 20px 0;">
+        <div style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; padding-left: 0;">Transactions</div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <thead>
+                <tr style="background: #f8fafc;">
+                    <th style="padding: 10px 16px; text-align: left; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0;">Transaction Date</th>
+                    <th style="padding: 10px 16px; text-align: left; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0;">Method</th>
+                    <th style="padding: 10px 16px; text-align: left; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0;">Transaction ID</th>
+                    <th style="padding: 10px 16px; text-align: right; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0;">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="padding: 10px 16px; color: #334155; border-bottom: 1px solid #f8fafc;">${fmtDate(paidAt || dateIssued)}</td>
+                    <td style="padding: 10px 16px; color: #334155; text-transform: uppercase; font-weight: 600; border-bottom: 1px solid #f8fafc;">${paymentMethod}</td>
+                    <td style="padding: 10px 16px; color: #64748b; font-family: monospace; font-size: 11px; border-bottom: 1px solid #f8fafc;">${transactionId}</td>
+                    <td style="padding: 10px 16px; text-align: right; font-weight: 700; color: #0f172a; border-bottom: 1px solid #f8fafc;">৳${fmt(total)} BDT</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    ` : ""}
+ 
+    <!-- ── Footer ───────────────────────────────────────────── -->
+    <div style="
+        margin-top: auto;
+        padding: 24px 48px;
+        background: #f8fafc;
+        border-top: 2px solid #f1f5f9;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    ">
+        <p style="font-size: 13px; color: #64748b; font-weight: 500;">
+            Thank you for your business. 🙏
+        </p>
+        <p style="font-size: 11px; color: #94a3b8;">
+            Support: support@novashop.com | novashop.com
+        </p>
+    </div>
+ 
+</div>
+</body>
+</html>`;
+}

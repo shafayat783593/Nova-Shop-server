@@ -3,8 +3,10 @@ import Cart from "../models/cart.modle.js";
 import Product from "../models/product.model.js";
 import DeliveryBoy from "../models/deliveryBoy.model.js";
 import Address from "../models/address.model.js";          // ✅ direct import
-import { sendInvoiceEmail } from "../utils/Invoice.service.js";
+import { sendInvoiceEmail } from "../services/invoice.service.js";
 import { getIO } from "../socket/socket.js";
+import SSLCommerzPayment from "sslcommerz-lts";
+import axios from "axios";
 
 const sendError = (res, message, status = 500) =>
     res.status(status).json({ success: false, message });
@@ -13,6 +15,50 @@ const sendError = (res, message, status = 500) =>
 const pushTimeline = (order, status, message, userId = null) => {
     order.timeline.push({ status, message, changedBy: userId });
 };
+
+
+
+const getBKASH = () => ({
+    username: process.env.bkash_username,
+    password: process.env.bkash_password,
+    apiKey: process.env.bkash_api_key,
+    secretKey: process.env.bkash_secret_key,
+    grantTokenUrl: process.env.bkash_grant_token_url,
+    createPaymentUrl: process.env.bkash_create_payment_url,
+    executePaymentUrl: process.env.bkash_execute_payment_url,
+});
+
+
+const IS_SANDBOX = process.env.NODE_ENV !== "production";
+const STORE_ID = process.env.STORE_ID;
+const STORE_PASS = process.env.STORE_PASS;
+
+
+const getBkashToken = async () => {
+    const BKASH = getBKASH();
+    console.log("🔐 Getting bKash token...");
+    console.log("   username:", BKASH.username);
+    console.log("   grantTokenUrl:", BKASH.grantTokenUrl);
+
+    const { data } = await axios.post(
+        BKASH.grantTokenUrl,
+        { app_key: BKASH.apiKey, app_secret: BKASH.secretKey },
+        {
+            headers: {
+                "Content-Type": "application/json",
+                username: BKASH.username,
+                password: BKASH.password,
+            },
+        }
+    );
+
+    console.log("🔐 Token response:", JSON.stringify(data, null, 2));
+    if (!data?.id_token) throw new Error("Failed to get bKash token");
+    return data.id_token;
+};
+
+
+
 
 // ─── PLACE ORDER ─────────────────────────────────────────────────────────────
 // POST /api/orders
@@ -450,7 +496,10 @@ export const adminUpdateOrderStatus = async (req, res) => {
 
         // Send invoice email on delivery (only once)
         if (status === "delivered" && !order.invoiceSentAt) {
-            await sendInvoiceEmail(order).catch(console.error);
+            // user email populate করতে হবে
+            const populatedOrder = await Order.findById(order._id).populate("user", "email").lean();
+            const userEmail = populatedOrder.user?.email || "";
+            await sendInvoiceEmail(order, userEmail).catch(console.error);
             order.invoiceSentAt = new Date();
             await order.save();
         }
@@ -558,5 +607,123 @@ export const adminGetOrderStats = async (req, res) => {
         });
     } catch (err) {
         return sendError(res, err.message);
+    }
+};
+
+
+
+
+
+export const retryPayment = async (req, res) => {
+    try {
+        const { orderId } = req.body;
+        if (!orderId) return sendError(res, "orderId is required", 400);
+
+        const order = await Order.findOne({ orderId, user: req.user._id });
+        if (!order) return sendError(res, "Order not found", 404);
+
+        if (order.paymentStatus === "paid") {
+            return sendError(res, "Order is already paid", 400);
+        }
+
+        if (order.paymentMethod === "cod") {
+            return sendError(res, "COD order does not require online payment", 400);
+        }
+
+        // bKash
+        if (order.paymentMethod === "bkash") {
+            const BKASH = getBKASH(); // আপনার lazy getter
+            const token = await getBkashToken();
+            const callbackURL = `${process.env.BACKEND_URL}/api/payments/bkash/callback`;
+
+            const { data } = await axios.post(
+                BKASH.createPaymentUrl,
+                {
+                    mode: "0011",
+                    payerReference: order.orderId,
+                    callbackURL,
+                    amount: String(order.total),
+                    currency: "BDT",
+                    intent: "sale",
+                    merchantInvoiceNumber: order.orderId,
+                },
+                {
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: token,
+                        "X-APP-Key": BKASH.apiKey,
+                    },
+                }
+            );
+
+            if (data?.statusCode !== "0000") {
+                return sendError(res, data?.statusMessage || "bKash payment creation failed", 400);
+            }
+
+            // Reset payment status
+            order.paymentStatus = "pending";
+            await order.save();
+
+            return res.json({ success: true, data: { method: "bkash", bkashURL: data.bkashURL } });
+        }
+
+        // SSLCommerz
+     // SSLCommerz
+if (order.paymentMethod === "sslcommerz") {
+    const sslcz = new SSLCommerzPayment('testbox', 'qwerty', true); // sandbox
+
+    // ✅ Retry তে নতুন unique tran_id — orderId + timestamp
+    const retryTranId = `${order.orderId}-${Date.now()}`;
+
+    const sslData = {
+        total_amount:     parseFloat(order.total),
+        currency:         "BDT",
+        tran_id:          retryTranId,  // ← নতুন unique ID
+        success_url:  `${process.env.BACKEND_URL}/api/payments/sslcommerz/success`,
+        fail_url:     `${process.env.BACKEND_URL}/api/payments/sslcommerz/fail`,
+        cancel_url:   `${process.env.BACKEND_URL}/api/payments/sslcommerz/cancel`,
+        ipn_url:      `${process.env.BACKEND_URL}/api/payments/sslcommerz/ipn`,
+        cus_name:     order.shippingAddress.fullName    || "Customer",
+        cus_email:    "customer@example.com",
+        cus_add1:     order.shippingAddress.addressLine || "Address",
+        cus_city:     order.shippingAddress.district    || "Dhaka",
+        cus_state:    order.shippingAddress.division    || "Dhaka",
+        cus_postcode: order.shippingAddress.postalCode  || "1000",
+        cus_country:  "Bangladesh",
+        cus_phone:    order.shippingAddress.phone       || "01700000000",
+        ship_name:    order.shippingAddress.fullName    || "Customer",
+        ship_add1:    order.shippingAddress.addressLine || "Address",
+        ship_city:    order.shippingAddress.district    || "Dhaka",
+        ship_state:   order.shippingAddress.division    || "Dhaka",
+        ship_postcode: order.shippingAddress.postalCode || "1000",
+        ship_country: "Bangladesh",
+        product_name:     "Order Items",
+        product_category: "ecommerce",
+        product_profile:  "general",
+        num_of_item:      order.items.length,
+        product_amount:   order.subtotal,
+        discount_amount:  order.discount || 0,
+        shipping_method:  "Courier",
+    };
+
+    console.log("SSL Retry tran_id:", retryTranId);
+    const apiResponse = await sslcz.init(sslData);
+    console.log("SSL Retry Response:", apiResponse);
+
+    if (!apiResponse?.GatewayPageURL) {
+        return sendError(res, "SSL gateway URL not received", 400);
+    }
+
+    // ✅ retryTranId save করো যাতে success callback এ order খুঁজে পাওয়া যায়
+    order.paymentStatus = "pending";
+    order.retryTranId = retryTranId;
+    await order.save();
+
+    return res.json({ success: true, data: { method: "sslcommerz", gatewayURL: apiResponse.GatewayPageURL } });
+}
+        return sendError(res, "Unknown payment method", 400);
+    } catch (err) {
+        console.error("Retry Payment Error:", err.message);
+        return sendError(res, "Payment retry failed");
     }
 };

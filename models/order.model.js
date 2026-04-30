@@ -88,6 +88,8 @@ const orderSchema = new mongoose.Schema(
             enum: ["pending", "paid", "failed", "refunded"],
             default: "pending",
         },
+        // order.model.js এ orderSchema তে যোগ করুন
+        retryTranIds: [{ type: String, default: [] }],
         transactionId: { type: String, default: null },
         paidAt: { type: Date, default: null },
 
