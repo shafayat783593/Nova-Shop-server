@@ -17,7 +17,7 @@ function getChromePath() {
 }
 
 // ─── Generate PDF Buffer ──────────────────────────────────────────────────────
-export default async function generateInvoicePDF(htmlData) {
+export  async function generateInvoicePDF(htmlData) {
     const html = buildInvoiceHTML(htmlData);
 
     const browser = await puppeteer.launch({
