@@ -937,3 +937,61 @@ export function buildInvoiceHTML(data) {
 </body>
 </html>`;
 }
+
+
+export const getInviteHtml = ({ name, inviteLink, expiresIn = "24 hours" }) => `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"/></head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',sans-serif;background:#f8fafc;">
+<div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);;">
+
+  <!-- Header -->
+  <div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);padding:36px 40px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;">
+      <div style="width:40px;height:40px;background:linear-gradient(135deg,#ef4444,#dc2626);border-radius:10px;display:flex;align-items:center;justify-content:center;">
+        <span style="color:white;font-size:20px;font-weight:900;">N</span>
+      </div>
+      <span style="color:#ffffff;font-size:20px;font-weight:800;">Nova Shop</span>
+    </div>
+    <h1 style="color:#ffffff;font-size:24px;font-weight:800;margin:0 0 8px 0;">
+      You're Invited! 🚀
+    </h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0;">Delivery Partner Invitation</p>
+  </div>
+
+  <!-- Body -->
+  <div style="padding:36px 40px;">
+    <p style="font-size:15px;color:#334155;line-height:1.7;margin:0 0 20px 0;">
+      Hi <strong style="color:#0f172a;">${name}</strong>,<br/><br/>
+      You have been selected as a <strong>Delivery Partner</strong> for Nova Shop.
+      Click the button below to set up your account and get started.
+    </p>
+
+    <div style="text-align:center;margin:32px 0;">
+      <a href="${inviteLink}"
+         style="display:inline-block;background:linear-gradient(135deg,#ef4444,#dc2626);
+                color:white;padding:16px 40px;border-radius:12px;font-weight:700;
+                font-size:15px;text-decoration:none;letter-spacing:0.3px;
+                box-shadow:0 4px 12px rgba(239,68,68,0.35);">
+        Setup My Account →
+      </a>
+    </div>
+
+    <div style="background:#fef9c3;border-radius:12px;padding:16px 20px;border-left:4px solid #eab308;">
+      <p style="font-size:13px;color:#854d0e;margin:0;line-height:1.6;">
+        ⏰ <strong>This invitation expires in ${expiresIn}.</strong><br/>
+        If you didn't expect this, please ignore this email.
+      </p>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="background:#f8fafc;padding:20px 40px;border-top:1px solid #f1f5f9;text-align:center;">
+    <p style="font-size:12px;color:#94a3b8;margin:0;">
+      © Nova Shop · Bangladesh · support@novashop.com
+    </p>
+  </div>
+</div>
+</body>
+</html>`;
