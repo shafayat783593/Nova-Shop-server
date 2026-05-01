@@ -23,7 +23,7 @@
 
 
 
-// utils/sendMail.js
+
 import { createTransport } from "nodemailer";
 
 const sendMail = async ({ email, subject, html, attachments = [] }) => {

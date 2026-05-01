@@ -497,9 +497,12 @@ export const adminUpdateOrderStatus = async (req, res) => {
         // Send invoice email on delivery (only once)
         if (status === "delivered" && !order.invoiceSentAt) {
             // user email populate করতে হবে
-            const populatedOrder = await Order.findById(order._id).populate("user", "email").lean();
+            // ✅ ঠিক করা
+            const populatedOrder = await Order.findById(order._id)
+                .populate("user", "email name")
+                .lean();
             const userEmail = populatedOrder.user?.email || "";
-            await sendInvoiceEmail(order, userEmail).catch(console.error);
+            await sendInvoiceEmail(populatedOrder, userEmail);  // ← populatedOrder পাঠাও    
             order.invoiceSentAt = new Date();
             await order.save();
         }
@@ -668,59 +671,59 @@ export const retryPayment = async (req, res) => {
         }
 
         // SSLCommerz
-     // SSLCommerz
-if (order.paymentMethod === "sslcommerz") {
-    const sslcz = new SSLCommerzPayment('testbox', 'qwerty', true); // sandbox
+        // SSLCommerz
+        if (order.paymentMethod === "sslcommerz") {
+            const sslcz = new SSLCommerzPayment('testbox', 'qwerty', true); // sandbox
 
-    // ✅ Retry তে নতুন unique tran_id — orderId + timestamp
-    const retryTranId = `${order.orderId}-${Date.now()}`;
+            // ✅ Retry তে নতুন unique tran_id — orderId + timestamp
+            const retryTranId = `${order.orderId}-${Date.now()}`;
 
-    const sslData = {
-        total_amount:     parseFloat(order.total),
-        currency:         "BDT",
-        tran_id:          retryTranId,  // ← নতুন unique ID
-        success_url:  `${process.env.BACKEND_URL}/api/payments/sslcommerz/success`,
-        fail_url:     `${process.env.BACKEND_URL}/api/payments/sslcommerz/fail`,
-        cancel_url:   `${process.env.BACKEND_URL}/api/payments/sslcommerz/cancel`,
-        ipn_url:      `${process.env.BACKEND_URL}/api/payments/sslcommerz/ipn`,
-        cus_name:     order.shippingAddress.fullName    || "Customer",
-        cus_email:    "customer@example.com",
-        cus_add1:     order.shippingAddress.addressLine || "Address",
-        cus_city:     order.shippingAddress.district    || "Dhaka",
-        cus_state:    order.shippingAddress.division    || "Dhaka",
-        cus_postcode: order.shippingAddress.postalCode  || "1000",
-        cus_country:  "Bangladesh",
-        cus_phone:    order.shippingAddress.phone       || "01700000000",
-        ship_name:    order.shippingAddress.fullName    || "Customer",
-        ship_add1:    order.shippingAddress.addressLine || "Address",
-        ship_city:    order.shippingAddress.district    || "Dhaka",
-        ship_state:   order.shippingAddress.division    || "Dhaka",
-        ship_postcode: order.shippingAddress.postalCode || "1000",
-        ship_country: "Bangladesh",
-        product_name:     "Order Items",
-        product_category: "ecommerce",
-        product_profile:  "general",
-        num_of_item:      order.items.length,
-        product_amount:   order.subtotal,
-        discount_amount:  order.discount || 0,
-        shipping_method:  "Courier",
-    };
+            const sslData = {
+                total_amount: parseFloat(order.total),
+                currency: "BDT",
+                tran_id: retryTranId,  // ← নতুন unique ID
+                success_url: `${process.env.BACKEND_URL}/api/payments/sslcommerz/success`,
+                fail_url: `${process.env.BACKEND_URL}/api/payments/sslcommerz/fail`,
+                cancel_url: `${process.env.BACKEND_URL}/api/payments/sslcommerz/cancel`,
+                ipn_url: `${process.env.BACKEND_URL}/api/payments/sslcommerz/ipn`,
+                cus_name: order.shippingAddress.fullName || "Customer",
+                cus_email: "customer@example.com",
+                cus_add1: order.shippingAddress.addressLine || "Address",
+                cus_city: order.shippingAddress.district || "Dhaka",
+                cus_state: order.shippingAddress.division || "Dhaka",
+                cus_postcode: order.shippingAddress.postalCode || "1000",
+                cus_country: "Bangladesh",
+                cus_phone: order.shippingAddress.phone || "01700000000",
+                ship_name: order.shippingAddress.fullName || "Customer",
+                ship_add1: order.shippingAddress.addressLine || "Address",
+                ship_city: order.shippingAddress.district || "Dhaka",
+                ship_state: order.shippingAddress.division || "Dhaka",
+                ship_postcode: order.shippingAddress.postalCode || "1000",
+                ship_country: "Bangladesh",
+                product_name: "Order Items",
+                product_category: "ecommerce",
+                product_profile: "general",
+                num_of_item: order.items.length,
+                product_amount: order.subtotal,
+                discount_amount: order.discount || 0,
+                shipping_method: "Courier",
+            };
 
-    console.log("SSL Retry tran_id:", retryTranId);
-    const apiResponse = await sslcz.init(sslData);
-    console.log("SSL Retry Response:", apiResponse);
+            console.log("SSL Retry tran_id:", retryTranId);
+            const apiResponse = await sslcz.init(sslData);
+            console.log("SSL Retry Response:", apiResponse);
 
-    if (!apiResponse?.GatewayPageURL) {
-        return sendError(res, "SSL gateway URL not received", 400);
-    }
+            if (!apiResponse?.GatewayPageURL) {
+                return sendError(res, "SSL gateway URL not received", 400);
+            }
 
-    // ✅ retryTranId save করো যাতে success callback এ order খুঁজে পাওয়া যায়
-    order.paymentStatus = "pending";
-    order.retryTranId = retryTranId;
-    await order.save();
+            // ✅ retryTranId save করো যাতে success callback এ order খুঁজে পাওয়া যায়
+            order.paymentStatus = "pending";
+            order.retryTranId = retryTranId;
+            await order.save();
 
-    return res.json({ success: true, data: { method: "sslcommerz", gatewayURL: apiResponse.GatewayPageURL } });
-}
+            return res.json({ success: true, data: { method: "sslcommerz", gatewayURL: apiResponse.GatewayPageURL } });
+        }
         return sendError(res, "Unknown payment method", 400);
     } catch (err) {
         console.error("Retry Payment Error:", err.message);

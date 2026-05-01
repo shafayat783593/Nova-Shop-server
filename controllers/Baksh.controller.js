@@ -104,6 +104,7 @@ export const bkashCreatePayment = async (req, res) => {
     }
 };
 
+
 export const bkashCallback = async (req, res) => {
     const { paymentID, status } = req.query;
     const SUCCESS_URL = `${process.env.FRONTEND_URL}/payment/success`;
@@ -129,12 +130,43 @@ export const bkashCallback = async (req, res) => {
             }
         );
 
-        if (data?.statusCode !== "0000" || data?.transactionStatus !== "Completed") {
+        // ✅ সম্পূর্ণ response লগ করো — আসলে কী আসছে দেখো
+        console.log("🔍 bKash Execute Response:", JSON.stringify(data, null, 2));
+
+        // ✅ statusCode চেক করো, transactionStatus "Complete" বা "Completed" দুটোই accept করো
+        if (data?.statusCode !== "0000") {
+            console.error("❌ bKash statusCode:", data?.statusCode, data?.statusMessage);
             return res.redirect(`${FAIL_URL}?reason=payment_not_completed`);
         }
 
-        const order = await Order.findOne({ orderId: data.merchantInvoiceNumber });
-        if (!order) return res.redirect(`${FAIL_URL}?reason=order_not_found`);
+        // ✅ transactionStatus "Complete" এবং "Completed" দুটোই handle করো
+        const txStatus = data?.transactionStatus || "";
+        const isCompleted = txStatus === "Completed" || txStatus === "Complete";
+
+        if (!isCompleted) {
+            console.error("❌ bKash transactionStatus:", txStatus);
+            return res.redirect(`${FAIL_URL}?reason=payment_not_completed`);
+        }
+
+        // ✅ merchantInvoiceNumber দিয়ে order খোঁজো
+        const invoiceNumber = data.merchantInvoiceNumber;
+        if (!invoiceNumber) {
+            console.error("❌ merchantInvoiceNumber missing in response");
+            return res.redirect(`${FAIL_URL}?reason=order_not_found`);
+        }
+
+        const order = await Order.findOne({ orderId: invoiceNumber })
+            .populate("user", "email name");
+
+        if (!order) {
+            console.error("❌ Order not found for orderId:", invoiceNumber);
+            return res.redirect(`${FAIL_URL}?reason=order_not_found`);
+        }
+
+        // ✅ Already paid হলে double processing এড়াও
+        if (order.paymentStatus === "paid") {
+            return res.redirect(`${SUCCESS_URL}?orderId=${order.orderId}`);
+        }
 
         order.paymentStatus = "paid";
         order.transactionId = data.trxID;
@@ -149,24 +181,27 @@ export const bkashCallback = async (req, res) => {
 
         const io = getIO();
         io.to("adminRoom").emit("order:paid", { orderId: order.orderId, total: order.total });
-        io.to(`user_${order.user}`).emit("order:statusUpdate", {
+        io.to(`user_${order.user?._id}`).emit("order:statusUpdate", {
             orderId: order.orderId,
             orderStatus: "confirmed",
             message: "Payment confirmed! Your order is being processed.",
         });
 
-        const userEmail = order.user?.email || "";
-        await sendInvoiceEmail(order, userEmail).catch(console.error);
-        order.invoiceSentAt = new Date();
-        await order.save();
+        const userEmail = order.user?.email || order.guestInfo?.email || "";
+        try {
+            await sendInvoiceEmail(order, userEmail);
+            console.log("✅ Invoice email sent to:", userEmail);
+            order.invoiceSentAt = new Date();
+            await order.save();
+        } catch (emailErr) {
+            console.error("❌ Invoice email failed:", emailErr.message);
+            // email fail হলেও payment success redirect করো
+        }
 
         return res.redirect(`${SUCCESS_URL}?orderId=${order.orderId}`);
+
     } catch (err) {
         console.error("bKash Callback Error:", err.response?.data || err.message);
         return res.redirect(`${FAIL_URL}?reason=server_error`);
     }
 };
-
-
-// POST /api/payments/retry
-// Body: { orderId: "ORD-XXXXXX" }
