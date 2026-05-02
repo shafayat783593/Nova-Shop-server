@@ -350,19 +350,26 @@ export const deliveryBoyLogin = TryCatch(async (req, res) => {
 
 // ─── 10. Get my assigned orders ──────────────────────────────────────────────
 // GET /api/delivery/orders
+// ─── 10. Get my assigned orders ──────────────────────────────────────────────
+// GET /api/delivery/orders
 export const getMyDeliveries = TryCatch(async (req, res) => {
     const orders = await Order.find({
         deliveryBoy: req.deliveryBoy._id,
-        orderStatus: { $in: ["shipped", "delivered"] },
+        // ✅ assigned, accepted, shipped সব include করো
+        $or: [
+            { deliveryAssignStatus: { $in: ["assigned", "accepted"] } },
+            { orderStatus: { $in: ["shipped", "delivered"] } },
+        ],
     })
         .sort("-updatedAt")
-        .select("orderId orderStatus shippingAddress total paymentMethod paymentStatus createdAt items timeline")
+        .select("orderId orderStatus deliveryAssignStatus shippingAddress total paymentMethod paymentStatus createdAt items timeline")
         .lean();
 
     return res.json({
         success: true,
         data: {
-            pending: orders.filter(o => o.orderStatus === "shipped"),
+            // pending = assigned + accepted + shipped (not yet delivered)
+            pending: orders.filter(o => o.orderStatus !== "delivered"),
             completed: orders.filter(o => o.orderStatus === "delivered"),
             total: orders.length,
         },
@@ -488,5 +495,71 @@ export const getDeliveryProfile = TryCatch(async (req, res) => {
             lastLocation: deliveryBoy.lastLocation,
             joinedAt: deliveryBoy.user.createdAt,
         },
+    });
+});
+
+
+
+
+// ─── 15. Respond to assignment (accept / reject) ──────────────────────────────
+// PATCH /api/delivery/orders/:orderId/respond
+// Body: { action: "accept" | "reject" }
+export const respondToAssignment = TryCatch(async (req, res) => {
+    const { action } = req.body;
+    if (!["accept", "reject"].includes(action)) {
+        return sendError(res, "action must be 'accept' or 'reject'");
+    }
+
+    const order = await Order.findOne({
+        orderId: req.params.orderId,
+        deliveryBoy: req.deliveryBoy._id,
+        deliveryAssignStatus: "assigned",
+    });
+
+    if (!order) return sendError(res, "Order not found or already responded", 404);
+
+    if (action === "accept") {
+        order.deliveryAssignStatus = "accepted";
+        order.orderStatus = "shipped";
+        order.deliveryAcceptedAt = new Date();
+        order.timeline.push({
+            status: "shipped",
+            message: `Accepted by delivery partner`,
+            changedAt: new Date(),
+        });
+    } else {
+        // reject — unassign করো
+        order.deliveryAssignStatus = "rejected";
+        order.deliveryBoy = null;
+        order.deliveryBoySnapshot = { name: null, phone: null, avatar: null };
+        order.timeline.push({
+            status: "prepared",
+            message: `Delivery rejected, pending reassignment`,
+            changedAt: new Date(),
+        });
+
+        // DeliveryBoy এর currentOrders থেকে সরাও
+        await DeliveryBoy.findByIdAndUpdate(req.deliveryBoy._id, {
+            $pull: { currentOrders: order._id },
+            activeOrderId: null,
+        });
+    }
+
+    await order.save();
+
+    // Admin কে notify করো
+    const io = getIO();
+    io.to("adminRoom").emit("order:statusUpdate", {
+        orderId: order.orderId,
+        deliveryAssignStatus: order.deliveryAssignStatus,
+        orderStatus: order.orderStatus,
+    });
+
+    return res.json({
+        success: true,
+        message: action === "accept"
+            ? "Order accepted! Head to the customer 🚴"
+            : "Order rejected. Admin will reassign.",
+        data: { deliveryAssignStatus: order.deliveryAssignStatus },
     });
 });

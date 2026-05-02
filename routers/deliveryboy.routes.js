@@ -19,6 +19,7 @@ import {
     markDelivered,
     toggleAvailability,
     getDeliveryProfile,
+    respondToAssignment,
 } from "../controllers/deliveryBoy.controller.js";
 import { authorizeAdmin, isAuth, isDeliveryBoy } from "../middlewares/isAuth.js";
 
@@ -55,6 +56,7 @@ router.get("/orders", isAuth, isDeliveryBoy, getMyDeliveries);
 
 // PATCH /api/delivery/location
 router.patch("/location", isAuth, isDeliveryBoy, updateLocation);
+router.patch("/orders/:orderId/respond", isAuth, isDeliveryBoy, respondToAssignment);
 
 // PATCH /api/delivery/availability
 router.patch("/availability", isAuth, isDeliveryBoy, toggleAvailability);
@@ -87,33 +89,3 @@ router.delete("/admin/delivery-boys/:deliveryBoyId", isAuth, authorizeAdmin, adm
 
 
 export default router;
-
-/*
-─── index.js / app.js এ এভাবে mount করো ────────────────────────────────────
-
-import deliveryRoutes from "./routes/delivery.routes.js";
-
-app.use("/api", deliveryRoutes);
-
-─── তাহলে URLs হবে: ──────────────────────────────────────────────────────────
-
-PUBLIC:
-  GET  /api/delivery/setup/:token
-  POST /api/delivery/setup
-  POST /api/delivery/login
-
-DELIVERY BOY:
-  GET   /api/delivery/profile
-  GET   /api/delivery/orders
-  PATCH /api/delivery/location
-  PATCH /api/delivery/availability
-  PATCH /api/delivery/orders/:orderId/delivered
-
-ADMIN:
-  POST   /api/admin/delivery-boys/invite
-  GET    /api/admin/delivery-boys
-  GET    /api/admin/delivery-boys/:id
-  PATCH  /api/admin/delivery-boys/:id
-  PATCH  /api/admin/delivery-boys/:id/toggle-active
-  DELETE /api/admin/delivery-boys/:id
-*/
