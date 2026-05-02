@@ -8,7 +8,7 @@ const orderItemSchema = new mongoose.Schema(
         product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
         variant: { type: mongoose.Schema.Types.ObjectId, default: null },
 
-        // Snapshots so order history never breaks if product changes
+        // Snapshots — order history stays intact even if product changes
         nameSnapshot: { type: String, required: true },
         imageSnapshot: { type: String, default: "" },
         priceAtOrder: { type: Number, required: true },
@@ -54,7 +54,7 @@ const timelineSchema = new mongoose.Schema(
 
 const orderSchema = new mongoose.Schema(
     {
-        // Human-readable order ID (e.g. ORD-AB12CD)
+        // Human-readable ID e.g. ORD-AB12CD
         orderId: {
             type: String,
             unique: true,
@@ -88,7 +88,6 @@ const orderSchema = new mongoose.Schema(
             enum: ["pending", "paid", "failed", "refunded"],
             default: "pending",
         },
-        // order.model.js এ orderSchema তে যোগ করুন
         retryTranIds: [{ type: String, default: [] }],
         transactionId: { type: String, default: null },
         paidAt: { type: Date, default: null },
@@ -109,16 +108,46 @@ const orderSchema = new mongoose.Schema(
         // ─── Order status lifecycle ───────────────────────────────────────
         orderStatus: {
             type: String,
-            enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"],
+            enum: ["pending", "confirmed", "processing", "prepared", "shipped", "delivered", "cancelled"],
             default: "pending",
             index: true,
         },
 
+        // ─── Delivery assignment ──────────────────────────────────────────
         deliveryBoy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "DeliveryBoy",
             default: null,
         },
+
+        // Tracks whether delivery boy has accepted the assignment
+        deliveryAssignStatus: {
+            type: String,
+            enum: ["unassigned", "assigned", "accepted", "rejected"],
+            default: "unassigned",
+            index: true,
+        },
+
+        // Snapshot of delivery boy at time of assignment (for invoice/history)
+        deliveryBoySnapshot: {
+            name: { type: String, default: null },
+            phone: { type: String, default: null },
+            avatar: { type: String, default: null },
+        },
+
+        // ─── Customer location (collected at order time for distance calc) ─
+        customerLocation: {
+            lat: { type: Number, default: null },
+            lng: { type: Number, default: null },
+        },
+
+        // ─── Delivery timestamps ──────────────────────────────────────────
+        deliveryAcceptedAt: { type: Date, default: null }, // delivery boy accepted
+        deliveryStartedAt: { type: Date, default: null }, // journey started
+        deliveredAt: { type: Date, default: null }, // order delivered
+
+        // ─── ETA ──────────────────────────────────────────────────────────
+        estimatedMinutes: { type: Number, default: null },
 
         // ─── Status history ───────────────────────────────────────────────
         timeline: [timelineSchema],
@@ -137,7 +166,7 @@ const orderSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-// ─── Indexes for common queries ───────────────────────────────────────────────
+// ─── Indexes ──────────────────────────────────────────────────────────────────
 orderSchema.index({ createdAt: -1 });
 orderSchema.index({ orderId: 1 });
 orderSchema.index({ "shippingAddress.district": 1 });

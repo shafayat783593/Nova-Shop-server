@@ -2,21 +2,20 @@ import Order from "../models/order.model.js";
 import Cart from "../models/cart.modle.js";
 import Product from "../models/product.model.js";
 import DeliveryBoy from "../models/deliveryBoy.model.js";
-import Address from "../models/address.model.js";          // ✅ direct import
+import Address from "../models/address.model.js";
 import { sendInvoiceEmail } from "../services/invoice.service.js";
 import { getIO } from "../socket/socket.js";
 import SSLCommerzPayment from "sslcommerz-lts";
 import axios from "axios";
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 const sendError = (res, message, status = 500) =>
     res.status(status).json({ success: false, message });
 
-// ─── Utility: push a timeline entry ──────────────────────────────────────────
 const pushTimeline = (order, status, message, userId = null) => {
     order.timeline.push({ status, message, changedBy: userId });
 };
-
-
 
 const getBKASH = () => ({
     username: process.env.bkash_username,
@@ -28,18 +27,8 @@ const getBKASH = () => ({
     executePaymentUrl: process.env.bkash_execute_payment_url,
 });
 
-
-const IS_SANDBOX = process.env.NODE_ENV !== "production";
-const STORE_ID = process.env.STORE_ID;
-const STORE_PASS = process.env.STORE_PASS;
-
-
 const getBkashToken = async () => {
     const BKASH = getBKASH();
-    console.log("🔐 Getting bKash token...");
-    console.log("   username:", BKASH.username);
-    console.log("   grantTokenUrl:", BKASH.grantTokenUrl);
-
     const { data } = await axios.post(
         BKASH.grantTokenUrl,
         { app_key: BKASH.apiKey, app_secret: BKASH.secretKey },
@@ -51,34 +40,33 @@ const getBkashToken = async () => {
             },
         }
     );
-
-    console.log("🔐 Token response:", JSON.stringify(data, null, 2));
     if (!data?.id_token) throw new Error("Failed to get bKash token");
     return data.id_token;
 };
 
-
-
-
-// ─── PLACE ORDER ─────────────────────────────────────────────────────────────
+// ─── PLACE ORDER ──────────────────────────────────────────────────────────────
 // POST /api/orders
 export const placeOrder = async (req, res) => {
     try {
         const userId = req.user?._id;
         const sessionId = req.headers["x-session-id"];
 
-        const { shippingAddressId, shippingAddress, paymentMethod, customerNote } = req.body;
+        const {
+            shippingAddressId,
+            shippingAddress,
+            paymentMethod,
+            customerNote,
+            customerLocation, // { lat, lng } — optional, sent from frontend
+        } = req.body;
 
-        if (!paymentMethod) return sendError(res, "paymentMethod is required", 400);
-        if (!shippingAddressId && !shippingAddress) {
+        if (!paymentMethod)
+            return sendError(res, "paymentMethod is required", 400);
+        if (!shippingAddressId && !shippingAddress)
             return sendError(res, "Shipping address is required", 400);
-        }
 
         // ── Resolve shipping address ───────────────────────────────────────
         let resolvedAddress;
-
         if (shippingAddressId) {
-            // ✅ Address is already imported at the top — just use it directly
             const saved = await Address.findOne({ _id: shippingAddressId, user: userId }).lean();
             if (!saved) return sendError(res, "Address not found", 404);
             resolvedAddress = saved;
@@ -92,9 +80,8 @@ export const placeOrder = async (req, res) => {
             : { sessionId, isCheckedOut: false };
 
         const cart = await Cart.findOne(cartFilter).populate("items.product");
-        if (!cart || cart.items.length === 0) {
+        if (!cart || cart.items.length === 0)
             return sendError(res, "Cart is empty", 400);
-        }
 
         // ── Validate stock & build order items ─────────────────────────────
         const orderItems = [];
@@ -102,16 +89,13 @@ export const placeOrder = async (req, res) => {
         for (const item of cart.items) {
             const product = item.product;
 
-            if (!product || !product.isActive) {
+            if (!product || !product.isActive)
                 return sendError(res, `Product "${item.nameSnapshot}" is no longer available`, 400);
-            }
 
-            // Decrement variant stock if applicable
             if (product.hasVariants && item.variant) {
                 const variant = product.variants.id(item.variant);
-                if (!variant || variant.stock < item.quantity) {
+                if (!variant || variant.stock < item.quantity)
                     return sendError(res, `Insufficient stock for "${item.nameSnapshot}"`, 400);
-                }
                 variant.stock -= item.quantity;
                 await product.save();
             }
@@ -141,6 +125,7 @@ export const placeOrder = async (req, res) => {
                 division: resolvedAddress.division,
                 postalCode: resolvedAddress.postalCode || "",
             },
+            customerLocation: customerLocation || { lat: null, lng: null },
             paymentMethod,
             paymentStatus: "pending",
             subtotal: cart.subtotal,
@@ -154,11 +139,10 @@ export const placeOrder = async (req, res) => {
         pushTimeline(order, "pending", "Order placed by customer", userId);
         await order.save();
 
-        // ── Mark cart as checked out ───────────────────────────────────────
         cart.isCheckedOut = true;
         await cart.save();
 
-        // ── Notify admin via Socket.io ─────────────────────────────────────
+        // ── Notify admin ───────────────────────────────────────────────────
         const io = getIO();
         io.to("adminRoom").emit("order:new", {
             orderId: order.orderId,
@@ -183,14 +167,8 @@ export const placeOrder = async (req, res) => {
     }
 };
 
-
-
-
-
-
-// ─── BUY NOW (Cart ছাড়া direct order) ────────────────────────────────────────
+// ─── BUY NOW ──────────────────────────────────────────────────────────────────
 // POST /api/orders/buy-now
-// Body: { productId, variantId?, quantity, shippingAddressId, paymentMethod, customerNote? }
 export const buyNow = async (req, res) => {
     try {
         const userId = req.user?._id;
@@ -198,13 +176,13 @@ export const buyNow = async (req, res) => {
             productId, variantId, quantity = 1,
             shippingAddressId, shippingAddress,
             paymentMethod, customerNote,
+            customerLocation,
         } = req.body;
 
         if (!productId) return sendError(res, "productId is required", 400);
         if (!paymentMethod) return sendError(res, "paymentMethod is required", 400);
-        if (!shippingAddressId && !shippingAddress) {
+        if (!shippingAddressId && !shippingAddress)
             return sendError(res, "Shipping address is required", 400);
-        }
 
         // ── Resolve address ────────────────────────────────────────────────
         let resolvedAddress;
@@ -218,9 +196,8 @@ export const buyNow = async (req, res) => {
 
         // ── Load product ───────────────────────────────────────────────────
         const product = await Product.findById(productId);
-        if (!product || !product.isActive) {
+        if (!product || !product.isActive)
             return sendError(res, "Product is not available", 400);
-        }
 
         // ── Validate stock & price ─────────────────────────────────────────
         let priceAtOrder = product.discountedPrice ?? product.basePrice;
@@ -229,13 +206,11 @@ export const buyNow = async (req, res) => {
         if (product.hasVariants && variantId) {
             const variant = product.variants.id(variantId);
             if (!variant) return sendError(res, "Variant not found", 404);
-            if (variant.stock < quantity) {
+            if (variant.stock < quantity)
                 return sendError(res, `Only ${variant.stock} items left in stock`, 400);
-            }
+
             priceAtOrder = variant.price ?? priceAtOrder;
             finalPrice = priceAtOrder;
-
-            // Decrement stock
             variant.stock -= quantity;
             await product.save();
         }
@@ -266,6 +241,7 @@ export const buyNow = async (req, res) => {
                 division: resolvedAddress.division,
                 postalCode: resolvedAddress.postalCode || "",
             },
+            customerLocation: customerLocation || { lat: null, lng: null },
             paymentMethod,
             paymentStatus: "pending",
             subtotal,
@@ -278,7 +254,6 @@ export const buyNow = async (req, res) => {
         pushTimeline(order, "pending", "Order placed via Buy Now", userId);
         await order.save();
 
-        // ── Notify admin ───────────────────────────────────────────────────
         const io = getIO();
         io.to("adminRoom").emit("order:new", {
             orderId: order.orderId,
@@ -302,6 +277,7 @@ export const buyNow = async (req, res) => {
         return sendError(res, err.message);
     }
 };
+
 // ─── GET MY ORDERS (customer) ─────────────────────────────────────────────────
 // GET /api/orders/my?page=1&limit=10&status=pending
 export const getMyOrders = async (req, res) => {
@@ -318,7 +294,7 @@ export const getMyOrders = async (req, res) => {
                 .sort("-createdAt")
                 .skip(skip)
                 .limit(Number(limit))
-                .select("orderId orderStatus paymentStatus total createdAt items shippingAddress paymentMethod")
+                .select("orderId orderStatus paymentStatus total createdAt items shippingAddress paymentMethod deliveryAssignStatus deliveryBoySnapshot estimatedMinutes")
                 .lean(),
             Order.countDocuments(filter),
         ]);
@@ -343,15 +319,13 @@ export const getMyOrders = async (req, res) => {
 export const getOrderById = async (req, res) => {
     try {
         const order = await Order.findOne({ orderId: req.params.orderId })
-            .populate("deliveryBoy", "name phone")
+            .populate("deliveryBoy", "lastLocation isOnline")
             .lean();
 
         if (!order) return sendError(res, "Order not found", 404);
 
-        // Customers can only see their own orders
-        if (req.user.role !== "admin" && order.user?.toString() !== req.user._id.toString()) {
+        if (req.user.role !== "admin" && order.user?.toString() !== req.user._id.toString())
             return sendError(res, "Forbidden", 403);
-        }
 
         return res.status(200).json({ success: true, data: order });
     } catch (err) {
@@ -365,16 +339,12 @@ export const cancelOrder = async (req, res) => {
     try {
         const { reason } = req.body;
 
-        const order = await Order.findOne({
-            orderId: req.params.orderId,
-            user: req.user._id,
-        });
+        const order = await Order.findOne({ orderId: req.params.orderId, user: req.user._id });
         if (!order) return sendError(res, "Order not found", 404);
 
         const cancellableStatuses = ["pending", "confirmed"];
-        if (!cancellableStatuses.includes(order.orderStatus)) {
+        if (!cancellableStatuses.includes(order.orderStatus))
             return sendError(res, `Cannot cancel an order with status "${order.orderStatus}"`, 400);
-        }
 
         order.orderStatus = "cancelled";
         order.cancelledAt = new Date();
@@ -383,7 +353,6 @@ export const cancelOrder = async (req, res) => {
         pushTimeline(order, "cancelled", reason || "Cancelled by customer", req.user._id);
         await order.save();
 
-        // Notify admin
         const io = getIO();
         io.to("adminRoom").emit("order:statusUpdate", {
             orderId: order.orderId,
@@ -425,7 +394,7 @@ export const adminGetAllOrders = async (req, res) => {
                 .skip(skip)
                 .limit(Number(limit))
                 .populate("user", "name email")
-                .populate("deliveryBoy", "name phone")
+                .populate("deliveryBoy", "lastLocation isOnline")
                 .lean(),
             Order.countDocuments(filter),
         ]);
@@ -447,14 +416,14 @@ export const adminGetAllOrders = async (req, res) => {
 
 // ─── ADMIN: UPDATE ORDER STATUS ───────────────────────────────────────────────
 // PATCH /api/orders/admin/:orderId/status
+// Now includes "prepared" status — emits real-time to customer
 export const adminUpdateOrderStatus = async (req, res) => {
     try {
         const { status, adminNote } = req.body;
 
-        const validStatuses = ["confirmed", "processing", "shipped", "delivered", "cancelled"];
-        if (!validStatuses.includes(status)) {
+        const validStatuses = ["confirmed", "processing", "prepared", "shipped", "delivered", "cancelled"];
+        if (!validStatuses.includes(status))
             return sendError(res, `Invalid status. Must be one of: ${validStatuses.join(", ")}`, 400);
-        }
 
         const order = await Order.findOne({ orderId: req.params.orderId });
         if (!order) return sendError(res, "Order not found", 404);
@@ -465,6 +434,7 @@ export const adminUpdateOrderStatus = async (req, res) => {
         const statusMessages = {
             confirmed: "Order confirmed by admin",
             processing: "Order is being packed",
+            prepared: "Order is ready for pickup",
             shipped: "Order shipped",
             delivered: "Order delivered successfully",
             cancelled: "Order cancelled by admin",
@@ -472,10 +442,8 @@ export const adminUpdateOrderStatus = async (req, res) => {
 
         pushTimeline(order, status, statusMessages[status], req.user._id);
 
-        // COD orders get marked paid on delivery
-        if (status === "delivered" && order.paymentMethod === "cod") {
+        if (status === "delivered" && order.paymentMethod === "cod")
             order.paymentStatus = "paid";
-        }
 
         await order.save();
 
@@ -496,13 +464,10 @@ export const adminUpdateOrderStatus = async (req, res) => {
 
         // Send invoice email on delivery (only once)
         if (status === "delivered" && !order.invoiceSentAt) {
-            // user email populate করতে হবে
-            // ✅ ঠিক করা
             const populatedOrder = await Order.findById(order._id)
                 .populate("user", "email name")
                 .lean();
-            const userEmail = populatedOrder.user?.email || "";
-            await sendInvoiceEmail(populatedOrder, userEmail);  // ← populatedOrder পাঠাও    
+            await sendInvoiceEmail(populatedOrder, populatedOrder.user?.email || "");
             order.invoiceSentAt = new Date();
             await order.save();
         }
@@ -519,58 +484,66 @@ export const adminUpdateOrderStatus = async (req, res) => {
 
 // ─── ADMIN: ASSIGN DELIVERY BOY ───────────────────────────────────────────────
 // PATCH /api/orders/admin/:orderId/assign
+// Status becomes "assigned" — NOT "shipped" yet. Delivery boy must accept first.
 export const adminAssignDeliveryBoy = async (req, res) => {
     try {
         const { deliveryBoyId } = req.body;
 
         const [order, deliveryBoy] = await Promise.all([
             Order.findOne({ orderId: req.params.orderId }),
-            DeliveryBoy.findById(deliveryBoyId),
+            DeliveryBoy.findById(deliveryBoyId).populate("user", "name avatar"),
         ]);
 
         if (!order) return sendError(res, "Order not found", 404);
         if (!deliveryBoy) return sendError(res, "Delivery boy not found", 404);
-        if (!deliveryBoy.isAvailable) {
+        if (!deliveryBoy.isAvailable)
             return sendError(res, "Delivery boy is not available", 400);
-        }
 
+        // ── Update order ───────────────────────────────────────────────────
         order.deliveryBoy = deliveryBoy._id;
-        order.orderStatus = "shipped";
+        order.deliveryAssignStatus = "assigned";
+
+        // Save snapshot so customer always sees the right info
+        order.deliveryBoySnapshot = {
+            name: deliveryBoy.user?.name || "",
+            phone: deliveryBoy.phone || "",
+            avatar: deliveryBoy.user?.avatar || null,
+        };
 
         pushTimeline(
             order,
-            "shipped",
-            `Assigned to ${deliveryBoy.name} (${deliveryBoy.phone})`,
+            "assigned",
+            `Assigned to ${deliveryBoy.user?.name} (${deliveryBoy.phone})`,
             req.user._id
         );
 
         deliveryBoy.currentOrders.push(order._id);
+        deliveryBoy.activeOrderId = order._id;
 
         await Promise.all([order.save(), deliveryBoy.save()]);
 
-        // ── Real-time notifications ────────────────────────────────────────
+        // ── Notify delivery boy ────────────────────────────────────────────
         const io = getIO();
-
-        io.to(`user_${order.user}`).emit("order:statusUpdate", {
-            orderId: order.orderId,
-            orderStatus: "shipped",
-            deliveryBoyName: deliveryBoy.name,
-            deliveryBoyPhone: deliveryBoy.phone,
-            message: `Your order is out for delivery with ${deliveryBoy.name}`,
-        });
 
         io.to(`delivery_${deliveryBoy._id}`).emit("delivery:assigned", {
             orderId: order.orderId,
             _id: order._id,
             address: order.shippingAddress,
+            customerLocation: order.customerLocation,
+        });
+
+        // ── Notify admin ───────────────────────────────────────────────────
+        io.to("adminRoom").emit("order:statusUpdate", {
+            orderId: order.orderId,
+            deliveryAssignStatus: "assigned",
         });
 
         return res.status(200).json({
             success: true,
-            message: `Order assigned to ${deliveryBoy.name}`,
+            message: `Order assigned to ${deliveryBoy.user?.name}. Waiting for acceptance.`,
             data: {
                 orderId: order.orderId,
-                deliveryBoyName: deliveryBoy.name,
+                deliveryAssignStatus: order.deliveryAssignStatus,
             },
         });
     } catch (err) {
@@ -596,9 +569,7 @@ export const adminGetOrderStats = async (req, res) => {
             ]),
         ]);
 
-        const statusMap = Object.fromEntries(
-            byStatus.map((s) => [s._id, s.count])
-        );
+        const statusMap = Object.fromEntries(byStatus.map((s) => [s._id, s.count]));
 
         return res.status(200).json({
             success: true,
@@ -613,10 +584,7 @@ export const adminGetOrderStats = async (req, res) => {
     }
 };
 
-
-
-
-
+// ─── RETRY PAYMENT ────────────────────────────────────────────────────────────
 export const retryPayment = async (req, res) => {
     try {
         const { orderId } = req.body;
@@ -625,17 +593,14 @@ export const retryPayment = async (req, res) => {
         const order = await Order.findOne({ orderId, user: req.user._id });
         if (!order) return sendError(res, "Order not found", 404);
 
-        if (order.paymentStatus === "paid") {
+        if (order.paymentStatus === "paid")
             return sendError(res, "Order is already paid", 400);
-        }
-
-        if (order.paymentMethod === "cod") {
+        if (order.paymentMethod === "cod")
             return sendError(res, "COD order does not require online payment", 400);
-        }
 
-        // bKash
+        // ── bKash ──────────────────────────────────────────────────────────
         if (order.paymentMethod === "bkash") {
-            const BKASH = getBKASH(); // আপনার lazy getter
+            const BKASH = getBKASH();
             const token = await getBkashToken();
             const callbackURL = `${process.env.BACKEND_URL}/api/payments/bkash/callback`;
 
@@ -659,29 +624,24 @@ export const retryPayment = async (req, res) => {
                 }
             );
 
-            if (data?.statusCode !== "0000") {
+            if (data?.statusCode !== "0000")
                 return sendError(res, data?.statusMessage || "bKash payment creation failed", 400);
-            }
 
-            // Reset payment status
             order.paymentStatus = "pending";
             await order.save();
 
             return res.json({ success: true, data: { method: "bkash", bkashURL: data.bkashURL } });
         }
 
-        // SSLCommerz
-        // SSLCommerz
+        // ── SSLCommerz ─────────────────────────────────────────────────────
         if (order.paymentMethod === "sslcommerz") {
-            const sslcz = new SSLCommerzPayment('testbox', 'qwerty', true); // sandbox
-
-            // ✅ Retry তে নতুন unique tran_id — orderId + timestamp
+            const sslcz = new SSLCommerzPayment("testbox", "qwerty", true);
             const retryTranId = `${order.orderId}-${Date.now()}`;
 
             const sslData = {
                 total_amount: parseFloat(order.total),
                 currency: "BDT",
-                tran_id: retryTranId,  // ← নতুন unique ID
+                tran_id: retryTranId,
                 success_url: `${process.env.BACKEND_URL}/api/payments/sslcommerz/success`,
                 fail_url: `${process.env.BACKEND_URL}/api/payments/sslcommerz/fail`,
                 cancel_url: `${process.env.BACKEND_URL}/api/payments/sslcommerz/cancel`,
@@ -709,21 +669,17 @@ export const retryPayment = async (req, res) => {
                 shipping_method: "Courier",
             };
 
-            console.log("SSL Retry tran_id:", retryTranId);
             const apiResponse = await sslcz.init(sslData);
-            console.log("SSL Retry Response:", apiResponse);
-
-            if (!apiResponse?.GatewayPageURL) {
+            if (!apiResponse?.GatewayPageURL)
                 return sendError(res, "SSL gateway URL not received", 400);
-            }
 
-            // ✅ retryTranId save করো যাতে success callback এ order খুঁজে পাওয়া যায়
             order.paymentStatus = "pending";
             order.retryTranId = retryTranId;
             await order.save();
 
             return res.json({ success: true, data: { method: "sslcommerz", gatewayURL: apiResponse.GatewayPageURL } });
         }
+
         return sendError(res, "Unknown payment method", 400);
     } catch (err) {
         console.error("Retry Payment Error:", err.message);
