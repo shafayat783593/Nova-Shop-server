@@ -48,8 +48,7 @@ export const getReviewsByProduct = async (req, res) => {
     try {
         const { productId } = req.params;
         const reviews = await Review.find({ product: productId })
-            .populate("user", "name profilePic") // ইউজারের নাম ও ছবি দেখানোর জন্য
-            .sort("-createdAt");
+            .populate("user", "name avatar").sort("-createdAt");
 
         return res.status(200).json({ success: true, data: reviews });
     } catch (err) {

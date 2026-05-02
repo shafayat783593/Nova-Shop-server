@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import { redisClint } from "../index.js";
 import { User } from "../models/user.model.js";
 import { isSessionActive } from "../config/generateToken.js";
+import DeliveryBoy from "../models/deliveryBoy.model.js";
 
 export const isAuth = async (req, res, next) => {
     try {
@@ -92,38 +93,34 @@ export const authorizeVendor = async (req, res, next) => {
 
 
 
+// middlewares/isAuth.js এ এই function টা replace করুন
 
+import DeliveryBoyModel from "../models/deliveryBoy.model.js"; // ← আলাদা নামে import
 
-// export const optionalAuth = async (req, res, next) => {
-//     try {
-//         // isAuth এর মতোই cookie থেকে token নাও
-//         const token = req.cookies.accessToken;
-//         if (!token) return next(); // token নেই → guest, block করো না
+export const isDeliveryBoy = async (req, res, next) => {
+    try {
+        if (!req.user) {
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        }
 
-//         const userData = jwt.verify(token, process.env.JWT_SECRET);
-//         if (!userData) return next();
+        if (req.user.role !== "deliveryboy") {
+            return res.status(403).json({ success: false, message: "Access denied" });
+        }
 
-//         // Session active কিনা check করো
-//         const sessionActive = await isSessionActive(userData.id, userData.sessionId);
-//         if (!sessionActive) return next(); // session নেই → guest হিসেবে চালাও
+        // ✅ DeliveryBoyModel — model এর নাম আলাদা রাখা হয়েছে
+        const dbRecord = await DeliveryBoyModel.findOne({ user: req.user._id });
 
-//         // Redis cache check
-//         const cachedUser = await redisClint.get(`user:${userData.id}`);
-//         if (cachedUser) {
-//             req.user = JSON.parse(cachedUser);
-//             req.sessionId = userData.sessionId;
-//             return next();
-//         }
+        if (!dbRecord) {
+            return res.status(403).json({ success: false, message: "Delivery profile not found" });
+        }
 
-//         // DB থেকে আনো
-//         const user = await User.findById(userData.id).select("-password");
-//         if (user) {
-//             await redisClint.setEx(`user:${user._id}`, 3600, JSON.stringify(user));
-//             req.user = user;
-//             req.sessionId = userData.sessionId;
-//         }
-//     } catch {
-//         // যেকোনো error → guest হিসেবে চালাও, block করো না
-//     }
-//     next();
-// };
+        if (!dbRecord.isActive) {
+            return res.status(403).json({ success: false, message: "Account deactivated. Contact admin." });
+        }
+
+        req.deliveryBoy = dbRecord; // ✅ controller এ req.deliveryBoy হিসেবে পাবে
+        next();
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+    }
+};

@@ -21,7 +21,7 @@ import { orderRouter } from "./routers/order.routes.js";
 import addressRouter from "./routers/address.routes.js";
 import { initSocket } from "./socket/socket.js";
 import { invoiceRouter } from "./routers/Invoice.routes.js";
-
+import deliveryRoutes from "./routers/deliveryboy.routes.js";
 // কনফিগারেশন
 dotenv.config();
 const app = express();
@@ -67,6 +67,7 @@ app.use("/api/payments", paymentRouter);
 app.use("/api/addresses", addressRouter);
 app.use("/api/orders", orderRouter);
 app.use("/api/invoices", invoiceRouter);
+app.use("/api/deliveryboys", deliveryRoutes);
 // ডাটাবেস ও সার্ভার স্টার্ট
 const startServer = async () => {
     try {
