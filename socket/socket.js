@@ -5,120 +5,119 @@ import Order from "../models/order.model.js";
 
 let io;
 
-// ─── Initialize Socket.io ─────────────────────────────────────────────────────
-// Call once in server.js after creating the HTTP server
 export const initSocket = (httpServer) => {
     io = new Server(httpServer, {
         cors: {
-            origin: process.env.FRONTEND_URL || "http://localhost:3000",
+            origin: [
+                process.env.FRONTEND_URL || "http://localhost:3000",
+                "http://localhost:3000",
+                "http://localhost:3001",
+            ],
             credentials: true,
+            methods: ["GET", "POST"],
         },
+        transports: ["websocket", "polling"],
+        pingTimeout: 60000,
+        pingInterval: 25000,
     });
 
     io.on("connection", (socket) => {
         console.log(`✅ Socket connected: ${socket.id}`);
 
-        // ── Customer joins their personal room ────────────────────────────
+        // ── Customer ───────────────────────────────────────────────────────
         socket.on("join:user", (userId) => {
             if (!userId) return;
             socket.join(`user_${userId}`);
-            socket.data.userId = userId;
-            console.log(`👤 User ${userId} joined room`);
+            socket.data.userId = String(userId);
+            socket.emit("joined:user", { room: `user_${userId}` });
+            console.log(`👤 User ${userId} joined`);
         });
 
-        // ── Admin joins admin room ─────────────────────────────────────────
+        // ── Admin ──────────────────────────────────────────────────────────
         socket.on("join:admin", () => {
             socket.join("adminRoom");
+            socket.emit("joined:admin", { room: "adminRoom" });
             console.log(`🛡️  Admin joined adminRoom`);
         });
 
-        // ── Delivery boy joins their room & marks online ──────────────────
+        // ── Delivery boy ───────────────────────────────────────────────────
         socket.on("join:delivery", async (deliveryBoyId) => {
             if (!deliveryBoyId) return;
+            try {
+                socket.join(`delivery_${deliveryBoyId}`);
+                socket.data.deliveryBoyId = String(deliveryBoyId);
 
-            socket.join(`delivery_${deliveryBoyId}`);
-            socket.data.deliveryBoyId = deliveryBoyId;
+                await DeliveryBoy.findByIdAndUpdate(deliveryBoyId, {
+                    socketId: socket.id,
+                    isOnline: true,
+                });
 
-            await DeliveryBoy.findByIdAndUpdate(deliveryBoyId, {
-                socketId: socket.id,
-                isOnline: true,
-            });
-
-            console.log(`🚴 DeliveryBoy ${deliveryBoyId} joined & marked online`);
+                socket.emit("joined:delivery", { deliveryBoyId });
+                console.log(`🚴 DeliveryBoy ${deliveryBoyId} online`);
+            } catch (err) {
+                console.error("join:delivery error:", err.message);
+            }
         });
 
-        // ── Delivery boy sends real-time location ─────────────────────────
-        // Payload: { orderId, deliveryBoyId, lat, lng }
+        // ── Real-time GPS from delivery boy ────────────────────────────────
+        // { orderId, deliveryBoyId, lat, lng }
         socket.on("delivery:locationUpdate", async ({ orderId, deliveryBoyId, lat, lng }) => {
             if (!orderId || !deliveryBoyId || lat == null || lng == null) return;
 
             try {
-                // 1. Find the order to get customer's userId
                 const order = await Order.findOne({ orderId })
-                    .select("user customerLocation")
+                    .select("user customerLocation _id")
                     .lean();
-
                 if (!order) return;
 
                 const now = new Date();
 
-                // 2. Update delivery boy's last known location
                 await DeliveryBoy.findByIdAndUpdate(deliveryBoyId, {
                     lastLocation: { lat, lng, updatedAt: now },
                 });
 
-                // 3. Save to location history (24h TTL via index)
                 await LocationHistory.create({
                     deliveryBoy: deliveryBoyId,
                     order: order._id,
-                    lat,
-                    lng,
+                    lat, lng,
                     recordedAt: now,
                 });
 
-                // 4. Build payload for client
                 const payload = {
-                    orderId,
-                    lat,
-                    lng,
+                    orderId, lat, lng,
                     updatedAt: now,
-                    customerLat: order.customerLocation?.lat,
-                    customerLng: order.customerLocation?.lng,
+                    customerLat: order.customerLocation?.lat ?? null,
+                    customerLng: order.customerLocation?.lng ?? null,
                 };
 
-                // 5. Emit to customer
-                if (order.user) {
-                    io.to(`user_${order.user}`).emit("delivery:locationUpdate", payload);
-                }
-
-                // 6. Emit to admin
+                if (order.user) io.to(`user_${order.user}`).emit("delivery:locationUpdate", payload);
                 io.to("adminRoom").emit("delivery:locationUpdate", payload);
 
             } catch (err) {
-                console.error("❌ Socket locationUpdate error:", err.message);
+                console.error("❌ locationUpdate error:", err.message);
             }
         });
 
-        // ── Delivery boy disconnects ──────────────────────────────────────
-        socket.on("disconnect", async () => {
-            console.log(`❌ Socket disconnected: ${socket.id}`);
-
+        // ── Disconnect ─────────────────────────────────────────────────────
+        socket.on("disconnect", async (reason) => {
+            console.log(`❌ Disconnected: ${socket.id} — ${reason}`);
             const deliveryBoyId = socket.data.deliveryBoyId;
             if (!deliveryBoyId) return;
-
-            await DeliveryBoy.findByIdAndUpdate(deliveryBoyId, {
-                socketId: null,
-                isOnline: false,
-            });
-
-            console.log(`🔴 DeliveryBoy ${deliveryBoyId} marked offline`);
+            try {
+                await DeliveryBoy.findByIdAndUpdate(deliveryBoyId, {
+                    socketId: null,
+                    isOnline: false,
+                });
+                console.log(`🔴 DeliveryBoy ${deliveryBoyId} offline`);
+            } catch (err) {
+                console.error("disconnect update error:", err.message);
+            }
         });
     });
 
     return io;
 };
 
-// ─── Get the io instance (use in controllers) ─────────────────────────────────
 export const getIO = () => {
     if (!io) throw new Error("Socket.io not initialized. Call initSocket(server) first.");
     return io;
