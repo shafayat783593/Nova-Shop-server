@@ -475,6 +475,7 @@ export const toggleAvailability = TryCatch(async (req, res) => {
 
 // ─── 14. Get my profile ───────────────────────────────────────────────────────
 // GET /api/delivery/profile
+// deliveryBoy.controller.js — getDeliveryProfile
 export const getDeliveryProfile = TryCatch(async (req, res) => {
     const deliveryBoy = await DeliveryBoy.findById(req.deliveryBoy._id)
         .populate("user", "name email avatar createdAt")
@@ -483,6 +484,10 @@ export const getDeliveryProfile = TryCatch(async (req, res) => {
     return res.json({
         success: true,
         data: {
+            // ✅ এই দুটো যোগ করুন
+            deliveryBoyId: deliveryBoy._id,        // DeliveryBoy collection এর _id
+            _id: deliveryBoy._id,
+            
             name: deliveryBoy.user.name,
             email: deliveryBoy.user.email,
             avatar: deliveryBoy.user.avatar,
@@ -497,7 +502,6 @@ export const getDeliveryProfile = TryCatch(async (req, res) => {
         },
     });
 });
-
 
 
 

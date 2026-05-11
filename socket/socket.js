@@ -8,29 +8,28 @@ let io;
 export const initSocket = (httpServer) => {
     io = new Server(httpServer, {
         cors: {
-            origin: [
-                process.env.FRONTEND_URL || "http://localhost:3000",
-                "http://localhost:3000",
-                "http://localhost:3001",
-            ],
+            origin: "*", // dev এ সব allow, production এ restrict করো
             credentials: true,
             methods: ["GET", "POST"],
         },
         transports: ["websocket", "polling"],
-        pingTimeout: 60000,
+        pingTimeout:  60000,
         pingInterval: 25000,
+        allowEIO3: true, // older clients support
     });
 
     io.on("connection", (socket) => {
-        console.log(`✅ Socket connected: ${socket.id}`);
+        console.log(`✅ Socket connected: ${socket.id} | transport: ${socket.conn.transport.name}`);
 
         // ── Customer ───────────────────────────────────────────────────────
         socket.on("join:user", (userId) => {
             if (!userId) return;
-            socket.join(`user_${userId}`);
-            socket.data.userId = String(userId);
-            socket.emit("joined:user", { room: `user_${userId}` });
-            console.log(`👤 User ${userId} joined`);
+            const uid   = String(userId);
+            const room  = `user_${uid}`;
+            socket.join(room);
+            socket.data.userId = uid;
+            socket.emit("joined:user", { room });
+            console.log(`👤 User ${uid} → room [${room}]`);
         });
 
         // ── Admin ──────────────────────────────────────────────────────────
@@ -41,57 +40,92 @@ export const initSocket = (httpServer) => {
         });
 
         // ── Delivery boy ───────────────────────────────────────────────────
-        socket.on("join:delivery", async (deliveryBoyId) => {
-            if (!deliveryBoyId) return;
-            try {
-                socket.join(`delivery_${deliveryBoyId}`);
-                socket.data.deliveryBoyId = String(deliveryBoyId);
+    socket.on("join:delivery", async (deliveryBoyId) => {
+    if (!deliveryBoyId) {
+        console.warn("⚠️ join:delivery: no deliveryBoyId received");
+        return;
+    }
+    
+    console.log("🚴 join:delivery received, raw value:", deliveryBoyId, "type:", typeof deliveryBoyId);
+    
+    try {
+        const dbId = String(deliveryBoyId);
+        const room = `delivery_${dbId}`;
+        socket.join(room);
+        socket.data.deliveryBoyId = dbId;
 
-                await DeliveryBoy.findByIdAndUpdate(deliveryBoyId, {
-                    socketId: socket.id,
-                    isOnline: true,
-                });
-
-                socket.emit("joined:delivery", { deliveryBoyId });
-                console.log(`🚴 DeliveryBoy ${deliveryBoyId} online`);
-            } catch (err) {
-                console.error("join:delivery error:", err.message);
-            }
+        // ✅ isActive check ছাড়া update করো — না থাকলে error হতে পারে
+        await DeliveryBoy.findByIdAndUpdate(dbId, {
+            socketId: socket.id,
+            isOnline: true,
         });
 
+        socket.emit("joined:delivery", { deliveryBoyId: dbId, room });
+        console.log(`🚴 DeliveryBoy ${dbId} → room [${room}]`);
+    } catch (err) {
+        console.error("join:delivery error:", err.message, "| deliveryBoyId:", deliveryBoyId);
+    }
+});
+
         // ── Real-time GPS from delivery boy ────────────────────────────────
-        // { orderId, deliveryBoyId, lat, lng }
-        socket.on("delivery:locationUpdate", async ({ orderId, deliveryBoyId, lat, lng }) => {
-            if (!orderId || !deliveryBoyId || lat == null || lng == null) return;
+        // Payload: { orderId, deliveryBoyId, lat, lng }
+        socket.on("delivery:locationUpdate", async (payload) => {
+            console.log("📍 locationUpdate received:", JSON.stringify(payload));
+
+            const { orderId, deliveryBoyId, lat, lng } = payload || {};
+
+            if (!orderId || !deliveryBoyId || lat == null || lng == null) {
+                console.warn("⚠️  locationUpdate: missing fields", { orderId, deliveryBoyId, lat, lng });
+                return;
+            }
 
             try {
+                // Find order — match by orderId string (e.g. "ORD-XXXXXXXX")
                 const order = await Order.findOne({ orderId })
                     .select("user customerLocation _id")
                     .lean();
-                if (!order) return;
 
+                if (!order) {
+                    console.warn("⚠️  locationUpdate: order not found:", orderId);
+                    return;
+                }
+
+console.log("order.user:", order.user, "type:", typeof order.user);
                 const now = new Date();
 
+                // Update delivery boy's last known location
                 await DeliveryBoy.findByIdAndUpdate(deliveryBoyId, {
                     lastLocation: { lat, lng, updatedAt: now },
                 });
 
+                // Save to history (auto-delete after 24h via TTL index)
                 await LocationHistory.create({
                     deliveryBoy: deliveryBoyId,
-                    order: order._id,
+                    order:       order._id,
                     lat, lng,
                     recordedAt: now,
                 });
 
-                const payload = {
-                    orderId, lat, lng,
-                    updatedAt: now,
+                const emitPayload = {
+                    orderId,
+                    lat,
+                    lng,
+                    updatedAt:   now,
                     customerLat: order.customerLocation?.lat ?? null,
                     customerLng: order.customerLocation?.lng ?? null,
                 };
 
-                if (order.user) io.to(`user_${order.user}`).emit("delivery:locationUpdate", payload);
-                io.to("adminRoom").emit("delivery:locationUpdate", payload);
+                // ✅ KEY: emit to customer room using STRING userId
+                if (order.user) {
+                    const userRoom = `user_${String(order.user)}`;
+                    console.log(`📡 Emitting to customer room [${userRoom}]`);
+                    io.to(userRoom).emit("delivery:locationUpdate", emitPayload);
+                }
+
+                // Emit to admin
+                io.to("adminRoom").emit("delivery:locationUpdate", emitPayload);
+
+                console.log(`✅ Location broadcast done for order ${orderId}`);
 
             } catch (err) {
                 console.error("❌ locationUpdate error:", err.message);

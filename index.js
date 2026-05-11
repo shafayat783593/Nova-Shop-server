@@ -22,11 +22,14 @@ import addressRouter from "./routers/address.routes.js";
 import { initSocket } from "./socket/socket.js";
 import { invoiceRouter } from "./routers/Invoice.routes.js";
 import deliveryRoutes from "./routers/deliveryboy.routes.js";
+// import dns from "dns";
+
 // কনফিগারেশন
 dotenv.config();
 const app = express();
 const httpServer = createServer(app);
 const PORT = process.env.PORT || 5000;
+// dns.setServers(["1.1.1.1", "8.8.8.8"]);
 
 // মিডলওয়্যার
 app.use(express.json());
