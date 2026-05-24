@@ -1,11 +1,15 @@
+import mongoose from "mongoose";
 import Review from "../models/review.model.js";
 import Product from "../models/product.model.js";
 import Order from "../models/order.model.js";
 
 // ─── Helper: recalculate & persist product rating stats ──────────────────────
+// ✅ FIX: mongoose import সরাসরি top-level, dynamic import নয়
 async function syncProductRating(productId) {
+    const objectId = new mongoose.Types.ObjectId(productId);
+
     const [stats] = await Review.aggregate([
-        { $match: { product: new (await import("mongoose")).default.Types.ObjectId(productId), isVisible: true } },
+        { $match: { product: objectId, isVisible: true } },
         {
             $group: {
                 _id: "$product",
@@ -23,13 +27,12 @@ async function syncProductRating(productId) {
 
 // ─── CREATE REVIEW ────────────────────────────────────────────────────────────
 // POST /api/reviews
-// Auth required — only the buyer can review, only after delivery
 export const addReview = async (req, res) => {
     try {
         const { productId, orderId, rating, comment } = req.body;
         const userId = req.user._id;
 
-        // ── 1. Validate required fields ────────────────────────────────────
+        // ── 1. Validate ────────────────────────────────────────────────────
         if (!productId || !orderId || !rating) {
             return res.status(400).json({
                 success: false,
@@ -37,19 +40,20 @@ export const addReview = async (req, res) => {
             });
         }
 
-        if (rating < 1 || rating > 5) {
+        const ratingNum = Number(rating);
+        if (isNaN(ratingNum) || ratingNum < 1 || ratingNum > 5) {
             return res.status(400).json({
                 success: false,
                 message: "Rating must be between 1 and 5",
             });
         }
 
-        // ── 2. Verify the order belongs to this user AND is delivered ──────
+        // ── 2. Order must be delivered and belong to this user ─────────────
         const order = await Order.findOne({
             _id: orderId,
             user: userId,
-            orderStatus: "delivered",          // must be delivered
-        });
+            orderStatus: "delivered",
+        }).lean();
 
         if (!order) {
             return res.status(403).json({
@@ -58,7 +62,8 @@ export const addReview = async (req, res) => {
             });
         }
 
-        // ── 3. Verify the product exists in this order ─────────────────────
+        // ── 3. Product must exist in this order ────────────────────────────
+        // ✅ FIX: item.product may be ObjectId — toString() করে compare
         const boughtItem = order.items.find(
             (item) => String(item.product) === String(productId)
         );
@@ -70,7 +75,7 @@ export const addReview = async (req, res) => {
             });
         }
 
-        // ── 4. Check for duplicate review (same user + product + order) ────
+        // ── 4. Duplicate check ─────────────────────────────────────────────
         const existing = await Review.findOne({
             product: productId,
             user: userId,
@@ -84,19 +89,16 @@ export const addReview = async (req, res) => {
             });
         }
 
-        // ── 5. Save review ─────────────────────────────────────────────────
+        // ── 5. Create ──────────────────────────────────────────────────────
         const review = await Review.create({
             product: productId,
             user: userId,
             order: orderId,
-            rating: Number(rating),
+            rating: ratingNum,
             comment: comment?.trim() || "",
         });
 
-        // ── 6. Sync product rating stats ───────────────────────────────────
         await syncProductRating(productId);
-
-        // ── 7. Populate user info for the response ─────────────────────────
         await review.populate("user", "name avatar");
 
         return res.status(201).json({
@@ -105,7 +107,6 @@ export const addReview = async (req, res) => {
             data: review,
         });
     } catch (err) {
-        // Duplicate key from MongoDB (race condition fallback)
         if (err.code === 11000) {
             return res.status(409).json({
                 success: false,
@@ -124,36 +125,29 @@ export const updateReview = async (req, res) => {
         const userId = req.user._id;
 
         const review = await Review.findById(req.params.reviewId);
-
         if (!review) {
             return res.status(404).json({ success: false, message: "Review not found" });
         }
 
-        // Only the author can edit
         if (String(review.user) !== String(userId)) {
             return res.status(403).json({ success: false, message: "Not authorized" });
         }
 
         if (rating !== undefined) {
-            if (rating < 1 || rating > 5) {
+            const r = Number(rating);
+            if (isNaN(r) || r < 1 || r > 5) {
                 return res.status(400).json({ success: false, message: "Rating must be 1–5" });
             }
-            review.rating = Number(rating);
+            review.rating = r;
         }
 
-        if (comment !== undefined) {
-            review.comment = comment.trim();
-        }
+        if (comment !== undefined) review.comment = comment.trim();
 
         await review.save();
         await syncProductRating(review.product);
         await review.populate("user", "name avatar");
 
-        return res.status(200).json({
-            success: true,
-            message: "Review updated",
-            data: review,
-        });
+        return res.status(200).json({ success: true, message: "Review updated", data: review });
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });
     }
@@ -170,7 +164,7 @@ export const getReviewsByProduct = async (req, res) => {
 
         const filter = { product: productId, isVisible: true };
 
-        const [reviews, total] = await Promise.all([
+        const [reviews, total, breakdown] = await Promise.all([
             Review.find(filter)
                 .populate("user", "name avatar")
                 .sort({ createdAt: -1 })
@@ -178,48 +172,41 @@ export const getReviewsByProduct = async (req, res) => {
                 .limit(limit)
                 .lean(),
             Review.countDocuments(filter),
-        ]);
-
-        // Rating breakdown (1–5 star counts)
-        const breakdown = await Review.aggregate([
-            { $match: { product: new (await import("mongoose")).default.Types.ObjectId(productId), isVisible: true } },
-            { $group: { _id: "$rating", count: { $sum: 1 } } },
+            Review.aggregate([
+                { $match: { product: new mongoose.Types.ObjectId(productId), isVisible: true } },
+                { $group: { _id: "$rating", count: { $sum: 1 } } },
+            ]),
         ]);
 
         const ratingBreakdown = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-        breakdown.forEach(({ _id, count }) => {
-            ratingBreakdown[_id] = count;
-        });
+        breakdown.forEach(({ _id, count }) => { ratingBreakdown[_id] = count; });
 
         return res.status(200).json({
             success: true,
             data: reviews,
             ratingBreakdown,
-            pagination: {
-                total,
-                page,
-                pages: Math.ceil(total / limit),
-                limit,
-            },
+            pagination: { total, page, pages: Math.ceil(total / limit), limit },
         });
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });
     }
 };
 
-// ─── CHECK IF USER CAN REVIEW A PRODUCT FROM A SPECIFIC ORDER ────────────────
+// ─── CHECK IF USER CAN REVIEW ─────────────────────────────────────────────────
 // GET /api/reviews/can-review?productId=...&orderId=...
-// Used by the frontend to show/hide the review button
 export const canReview = async (req, res) => {
     try {
         const { productId, orderId } = req.query;
         const userId = req.user._id;
 
         if (!productId || !orderId) {
-            return res.status(400).json({ success: false, message: "productId and orderId required" });
+            return res.status(400).json({
+                success: false,
+                message: "productId and orderId are required",
+            });
         }
 
-        // 1. Order delivered and belongs to user?
+        // ── 1. Order delivered & belongs to user ───────────────────────────
         const order = await Order.findOne({
             _id: orderId,
             user: userId,
@@ -227,27 +214,41 @@ export const canReview = async (req, res) => {
         }).lean();
 
         if (!order) {
-            return res.status(200).json({ success: true, data: { canReview: false, reason: "order_not_delivered" } });
+            return res.status(200).json({
+                success: true,
+                data: { canReview: false, reason: "order_not_delivered" },
+            });
         }
 
-        // 2. Product in order?
+        // ── 2. Product in order ────────────────────────────────────────────
+        // ✅ FIX: String compare করতে হবে, ObjectId vs string issue
         const inOrder = order.items.some(
             (item) => String(item.product) === String(productId)
         );
 
         if (!inOrder) {
-            return res.status(200).json({ success: true, data: { canReview: false, reason: "product_not_in_order" } });
+            return res.status(200).json({
+                success: true,
+                data: { canReview: false, reason: "product_not_in_order" },
+            });
         }
 
-        // 3. Already reviewed?
-        const alreadyReviewed = await Review.exists({
+        // ── 3. Already reviewed? ───────────────────────────────────────────
+        const alreadyReviewed = await Review.findOne({
             product: productId,
             user: userId,
             order: orderId,
-        });
+        }).lean();
 
         if (alreadyReviewed) {
-            return res.status(200).json({ success: true, data: { canReview: false, reason: "already_reviewed", reviewId: alreadyReviewed._id } });
+            return res.status(200).json({
+                success: true,
+                data: {
+                    canReview: false,
+                    reason: "already_reviewed",
+                    reviewId: alreadyReviewed._id,
+                },
+            });
         }
 
         return res.status(200).json({ success: true, data: { canReview: true } });
@@ -256,7 +257,7 @@ export const canReview = async (req, res) => {
     }
 };
 
-// ─── GET MY REVIEW FOR A PRODUCT+ORDER ────────────────────────────────────────
+// ─── GET MY REVIEW ────────────────────────────────────────────────────────────
 // GET /api/reviews/my?productId=...&orderId=...
 export const getMyReview = async (req, res) => {
     try {
@@ -285,12 +286,10 @@ export const deleteReview = async (req, res) => {
         const isAdmin = req.user.role === "admin";
 
         const review = await Review.findById(req.params.reviewId);
-
         if (!review) {
             return res.status(404).json({ success: false, message: "Review not found" });
         }
 
-        // Only the author or admin can delete
         if (!isAdmin && String(review.user) !== String(userId)) {
             return res.status(403).json({ success: false, message: "Not authorized" });
         }
@@ -306,7 +305,7 @@ export const deleteReview = async (req, res) => {
 };
 
 // ─── ADMIN: TOGGLE VISIBILITY ─────────────────────────────────────────────────
-// PATCH /api/reviews/:reviewId/visibility  (admin only)
+// PATCH /api/reviews/:reviewId/visibility
 export const toggleVisibility = async (req, res) => {
     try {
         const review = await Review.findById(req.params.reviewId);
