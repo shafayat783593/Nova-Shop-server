@@ -7,6 +7,7 @@ import { sendInvoiceEmail } from "../services/invoice.service.js";
 import { getIO } from "../socket/socket.js";
 import SSLCommerzPayment from "sslcommerz-lts";
 import axios from "axios";
+import { recalculate, runPromotionEngine } from "../utils/runPromotionEngine.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -200,56 +201,82 @@ export const buyNow = async (req, res) => {
             return sendError(res, "Product is not available", 400);
 
         // ── Validate stock & price ─────────────────────────────────────────
-        let priceAtOrder = product.discountedPrice ?? product.basePrice;
-        let finalPrice = priceAtOrder;
+ // ── নতুন code (এটা দিয়ে replace করো) ─────────────────────
+// ── Validate stock ─────────────────────────────────────────────────────
+let basePrice = product.discountedPrice ?? product.basePrice;
 
-        if (product.hasVariants && variantId) {
-            const variant = product.variants.id(variantId);
-            if (!variant) return sendError(res, "Variant not found", 404);
-            if (variant.stock < quantity)
-                return sendError(res, `Only ${variant.stock} items left in stock`, 400);
+if (product.hasVariants && variantId) {
+    const variant = product.variants.id(variantId);
+    if (!variant) return sendError(res, "Variant not found", 404);
+    if (variant.stock < quantity)
+        return sendError(res, `Only ${variant.stock} items left in stock`, 400);
+    basePrice = variant.price ?? basePrice;
+    variant.stock -= quantity;
+    await product.save();
+}
 
-            priceAtOrder = variant.price ?? priceAtOrder;
-            finalPrice = priceAtOrder;
-            variant.stock -= quantity;
-            await product.save();
-        }
+// ── Promotion engine চালাও ─────────────────────────────────────────────
+const fakeItems = [{
+    product: product._id,
+    priceAtAdd: basePrice,
+    quantity,
+    category: product.category || "",
+    variant: variantId || null,
+    nameSnapshot: product.name,
+    imageSnapshot: product.images?.[0] || "",
+}];
 
-        // ── Build order ────────────────────────────────────────────────────
-        const subtotal = finalPrice * quantity;
-        const shippingFee = subtotal >= 500 ? 0 : 80;
-        const total = subtotal + shippingFee;
+let finalPrice = basePrice;
+let appliedPromotions = [];
+let subtotal, discount, shippingFee, total;
 
-        const order = new Order({
-            user: userId || null,
-            items: [{
-                product: product._id,
-                variant: variantId || null,
-                nameSnapshot: product.name,
-                imageSnapshot: product.images?.[0] || "",
-                priceAtOrder,
-                finalPrice,
-                quantity,
-                appliedPromotions: [],
-            }],
-            shippingAddress: {
-                fullName: resolvedAddress.fullName,
-                phone: resolvedAddress.phone,
-                addressLine: resolvedAddress.addressLine,
-                area: resolvedAddress.area,
-                district: resolvedAddress.district,
-                division: resolvedAddress.division,
-                postalCode: resolvedAddress.postalCode || "",
-            },
-            customerLocation: customerLocation || { lat: null, lng: null },
-            paymentMethod,
-            paymentStatus: "pending",
-            subtotal,
-            discount: 0,
-            shippingFee,
-            total,
-            customerNote: customerNote || "",
-        });
+try {
+    const result = await runPromotionEngine(fakeItems, paymentMethod);
+    finalPrice = result.enrichedItems[0]?.finalPrice ?? basePrice;
+    appliedPromotions = result.enrichedItems[0]?.appliedPromotions || [];
+    subtotal = result.subtotal;        // basePrice * qty
+    discount = result.discount;        // total discount amount
+    shippingFee = result.shippingFee;  // 0 or 80 (promotion engine decide করবে)
+    total = result.total;
+} catch (e) {
+    console.warn("Promotion engine failed for buyNow:", e.message);
+    subtotal = basePrice * quantity;
+    discount = 0;
+    shippingFee = subtotal >= 500 ? 0 : 80;
+    total = subtotal + shippingFee;
+    finalPrice = basePrice;
+}
+
+      const order = new Order({
+    user: userId || null,
+    items: [{
+        product: product._id,
+        variant: variantId || null,
+        nameSnapshot: product.name,
+        imageSnapshot: product.images?.[0] || "",
+        priceAtOrder: basePrice,      // ✅ basePrice (original)
+        finalPrice,                    // ✅ promotion-adjusted price
+        quantity,
+        appliedPromotions,             // ✅ applied promotions
+    }],
+    shippingAddress: {
+    fullName: resolvedAddress.fullName,
+    phone: resolvedAddress.phone,
+    addressLine: resolvedAddress.addressLine,
+    area: resolvedAddress.area,
+    district: resolvedAddress.district,
+    division: resolvedAddress.division,
+    postalCode: resolvedAddress.postalCode || "",
+},    // same as before
+    customerLocation: customerLocation || { lat: null, lng: null },
+    paymentMethod,
+    paymentStatus: "pending",
+    subtotal,     // ✅ from promotion engine
+    discount,     // ✅ from promotion engine (আর 0 না)
+    shippingFee,  // ✅ from promotion engine
+    total,        // ✅ from promotion engine
+    customerNote: customerNote || "",
+});
 
         pushTimeline(order, "pending", "Order placed via Buy Now", userId);
         await order.save();
@@ -684,5 +711,43 @@ export const retryPayment = async (req, res) => {
     } catch (err) {
         console.error("Retry Payment Error:", err.message);
         return sendError(res, "Payment retry failed");
+    }
+};
+
+
+
+// order.controller.js
+export const buyNowPreview = async (req, res) => {
+    try {
+        const { productId, variantId, quantity = 1, paymentMethod } = req.body;
+        const product = await Product.findById(productId);
+        if (!product || !product.isActive) return sendError(res, "Product not available", 400);
+
+        let basePrice = product.discountedPrice ?? product.basePrice;
+        if (product.hasVariants && variantId) {
+            const variant = product.variants.id(variantId);
+            if (variant) basePrice = variant.price ?? basePrice;
+        }
+
+        const fakeItems = [{
+            product: product._id,
+            priceAtAdd: basePrice,
+            quantity,
+            category: product.category || "",
+        }];
+
+        const result = await runPromotionEngine(fakeItems, paymentMethod || "cod");
+        return res.json({
+            success: true,
+            data: {
+                finalPrice: result.enrichedItems[0]?.finalPrice ?? basePrice,
+                subtotal: result.subtotal,
+                discount: result.discount,
+                shippingFee: result.shippingFee,
+                total: result.total,
+            },
+        });
+    } catch (err) {
+        return sendError(res, err.message);
     }
 };

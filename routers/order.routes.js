@@ -9,6 +9,7 @@ import {
     adminUpdateOrderStatus,
     adminAssignDeliveryBoy,
     adminGetOrderStats,
+    buyNowPreview,
 } from "../controllers/order.controller.js";
 import { isAuth, authorizeAdmin } from "../middlewares/isAuth.js";
 
@@ -32,5 +33,5 @@ orderRouter.get("/admin/stats", isAuth, authorizeAdmin, adminGetOrderStats);
 orderRouter.get("/admin/all", isAuth, authorizeAdmin, adminGetAllOrders);
 orderRouter.patch("/admin/:orderId/status", isAuth, authorizeAdmin, adminUpdateOrderStatus);
 orderRouter.patch("/admin/:orderId/assign", isAuth, authorizeAdmin, adminAssignDeliveryBoy);
-
+orderRouter.post("/buy-now/preview", isAuth, buyNowPreview);
 export { orderRouter };

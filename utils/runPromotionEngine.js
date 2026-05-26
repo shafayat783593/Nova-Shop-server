@@ -6,7 +6,7 @@ const n = (val) => {
     return isNaN(num) ? 0 : num;
 };
 
-async function runPromotionEngine(items, paymentMethod) {
+ export async function runPromotionEngine(items, paymentMethod) {
     const now = new Date();
 
     const rawPromotions = await Promotion.find({
