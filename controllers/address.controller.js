@@ -56,7 +56,7 @@ export const addAddress = async (req, res) => {
             division, district, area,
             postalCode, label, isDefault,
         } = req.body;
-console.log(req.body);
+
         // ── Required field check ──────────────────────────────────────────
         if (!fullName || !phone || !addressLine || !division || !district || !area) {
             return sendError(
