@@ -23,6 +23,7 @@ import { initSocket } from "./socket/socket.js";
 import { invoiceRouter } from "./routers/Invoice.routes.js";
 import deliveryRoutes from "./routers/deliveryboy.routes.js";
 import reviewRoutes from "./routers/review.routes.js"
+import chatRouter from "./routers/chat.routes.js";
 // import dns from "dns";
 
 // কনফিগারেশন
@@ -73,6 +74,7 @@ app.use("/api/orders", orderRouter);
 app.use("/api/invoices", invoiceRouter);
 app.use("/api/deliveryboys", deliveryRoutes);
 app.use("/api/reviews", reviewRoutes);
+app.use("/api/chat", chatRouter);
 // ডাটাবেস ও সার্ভার স্টার্ট
 const startServer = async () => {
     try {
