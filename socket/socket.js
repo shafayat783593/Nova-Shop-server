@@ -1,6 +1,7 @@
 import { Server } from "socket.io";
 import DeliveryBoy from "../models/deliveryBoy.model.js";
-import LocationHistory from "../models/locationHistory.model.js";
+import LocationHistory from "../models/locationhistory.model.js";
+
 import Order from "../models/order.model.js";
 
 let io;
