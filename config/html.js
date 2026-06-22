@@ -1,4 +1,4 @@
-import sendMail from "./sendMail";
+import sendMail from "./sendMail.js";
 
 export const getOtpHtml = ({ email, otp }) => {
     const html = `<!DOCTYPE html>
