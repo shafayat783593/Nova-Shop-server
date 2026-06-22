@@ -3,7 +3,7 @@ import {
     allDivision, districtsOf, upazilaNamesOf, isValidDivision,
     isValidDistrict, getDivisionOfDistrict
 }
-    from "../utils/bangladeshAddress.js";;
+    from "../utils/Bangladeshaddress.js";;
 
 const sendError = (res, message, status = 500) =>
     res.status(status).json({ success: false, message });

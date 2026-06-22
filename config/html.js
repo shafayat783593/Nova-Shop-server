@@ -1,3 +1,5 @@
+import sendMail from "./sendMail";
+
 export const getOtpHtml = ({ email, otp }) => {
     const html = `<!DOCTYPE html>
 <html lang="en">

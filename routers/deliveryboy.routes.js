@@ -20,7 +20,7 @@ import {
     toggleAvailability,
     getDeliveryProfile,
     respondToAssignment,
-} from "../controllers/deliveryBoy.controller.js";
+} from "../controllers/Deliveryboy.controller.js";
 import { authorizeAdmin, isAuth, isDeliveryBoy } from "../middlewares/isAuth.js";
 
 

@@ -1,4 +1,4 @@
-import { ChatMessage } from "../models/chatMessage.model.js";
+import { ChatMessage } from "../models/chatmessage.model.js";
 import { Conversation } from "../models/conversation.model.js";
 import { getIO } from "../socket/socket.js";
 

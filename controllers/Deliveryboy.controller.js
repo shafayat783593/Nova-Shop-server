@@ -447,7 +447,7 @@ export const markDelivered = TryCatch(async (req, res) => {
 
     // Invoice email
     if (!order.invoiceSentAt) {
-        const { sendInvoiceEmail } = await import("../services/invoice.service.js");
+        const { sendInvoiceEmail } = await import("../services/Invoice.service.js");
         const populated = await Order.findById(order._id).populate("user", "email").lean();
         await sendInvoiceEmail(order, populated.user?.email || "").catch(console.error);
         order.invoiceSentAt = new Date();

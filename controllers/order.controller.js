@@ -3,7 +3,7 @@ import Cart from "../models/cart.modle.js";
 import Product from "../models/product.model.js";
 import DeliveryBoy from "../models/deliveryBoy.model.js";
 import Address from "../models/address.model.js";
-import { sendInvoiceEmail } from "../services/invoice.service.js";
+import { sendInvoiceEmail } from "../services/Invoice.service.js";
 import { getIO } from "../socket/socket.js";
 import SSLCommerzPayment from "sslcommerz-lts";
 import axios from "axios";

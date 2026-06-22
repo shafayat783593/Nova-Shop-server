@@ -3,12 +3,12 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {
-    "start": "npm run dev",
-    "dev": "nodemon index.js",
-    "build": "echo 'no build needed'",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+"scripts": {
+  "start": "node index.js",
+  "dev": "nodemon index.js",
+  "build": "echo 'no build needed'",
+  "test": "echo \"Error: no test specified\" && exit 1"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -34,7 +34,11 @@
     "slugify": "^1.6.9",
     "socket.io": "^4.8.3",
     "sslcommerz-lts": "^1.2.0",
-    "uuid": "^14.0.0",
+    "uuid": "^14.0.1",
     "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "eslint-plugin-import": "^2.32.0",
+    "globals": "^17.6.0"
   }
 }

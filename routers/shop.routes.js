@@ -1,12 +1,12 @@
-import express from "express";
-import { getMyShop, createShop, updateShop } from "../controllers/shop.controller.js";
-import { authorizeVendor, isAuth } from "../middlewares/isAuth.js";
+// import express from "express";
+// import { getMyShop, createShop, updateShop } from "../controllers/shop.controller.js";
+// import { authorizeVendor, isAuth } from "../middlewares/isAuth.js";
 
-const router = express.Router();
+// const router = express.Router();
 
 
-router.get("/my", isAuth, authorizeVendor, getMyShop);
-router.post("/shop-info", isAuth, authorizeVendor, createShop);
-router.put("/shop-info", isAuth, authorizeVendor, updateShop);
+// router.get("/my", isAuth, authorizeVendor, getMyShop);
+// router.post("/shop-info", isAuth, authorizeVendor, createShop);
+// router.put("/shop-info", isAuth, authorizeVendor, updateShop);
 
-export default router;
+// export default router;

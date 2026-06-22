@@ -1,7 +1,7 @@
 import Invoice from "../models/invoice.model.js";
 import Order from "../models/order.model.js";
-import { generateInvoicePDF } from "../services/invoice.service.js";
-import { sendInvoiceEmail } from "../services/invoice.service.js";
+import { generateInvoicePDF } from "../services/Invoice.service.js";
+import { sendInvoiceEmail } from "../services/Invoice.service.js";
 
 const sendError = (res, message, status = 500) =>
     res.status(status).json({ success: false, message });
