@@ -1,10 +1,17 @@
 import jwt from "jsonwebtoken";
 import { redisClint } from "../index.js";
-import { generateCSRFToken, revokeCSRFTOKEN } from "../middlewares/csrfMiddleware.js";
+import { generateCSRFToken } from "../middlewares/csrfMiddleware.js";
 import crypto from "crypto";
 
-const MAX_SESSIONS = 4; // ✅ maximum device limit
+const MAX_SESSIONS = 4;
+const isProduction = process.env.NODE_ENV === "production"; // ✅ এখানে declare করো
 
+const cookieOptions = (maxAge) => ({
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    maxAge,
+});
 // ─── Helper: device info from request ───────────────────────────
 export const extractDeviceInfo = (req) => {
     const ua = req.headers["user-agent"] || "Unknown";
@@ -53,14 +60,22 @@ export const generateToken = async (user, res, req) => {
     );
 
     const TTL = 7 * 24 * 60 * 60;
-    const sessionsKey = `sessions:${user._id}`; // ✅ Set of all sessionIds
+    const sessionsKey = `sessions:${user._id}`;
 
-    // ── Check current session count ──────────────────────────────
+    // ✅ Stale session cleanup
     const existingSessions = await redisClint.sMembers(sessionsKey);
+    const validSessions = [];
+    for (const sid of existingSessions) {
+        const exists = await redisClint.exists(`session:${sid}`);
+        if (exists) {
+            validSessions.push(sid);
+        } else {
+            await redisClint.sRem(sessionsKey, sid);
+        }
+    }
 
-    if (existingSessions.length >= MAX_SESSIONS) {
-        // ✅ Return error — frontend must ask user to logout one device
-        return { limitReached: true, sessions: existingSessions };
+    if (validSessions.length >= MAX_SESSIONS) {
+        return { limitReached: true, sessions: validSessions };
     }
 
     const sessionData = {
@@ -75,32 +90,19 @@ export const generateToken = async (user, res, req) => {
         lastActivity: new Date().toISOString(),
     };
 
-    // ── Store in Redis ───────────────────────────────────────────
     await redisClint.sAdd(sessionsKey, sessionId);
     await redisClint.expire(sessionsKey, TTL);
     await redisClint.setEx(`session:${sessionId}`, TTL, JSON.stringify(sessionData));
     await redisClint.setEx(`refreshToken:${user._id}:${sessionId}`, TTL, refreshToken);
 
-    // ── Cookies ──────────────────────────────────────────────────
-    res.cookie("accessToken", accessToken, {
-   httpOnly: true,
-    secure: isProduction,        // ✅ production-এ true, dev-এ false
-    sameSite: isProduction ? "none" : "lax",  // ✅ cross-site হলে none লাগবে
-    maxAge: 15 * 60 * 1000,
-    });
-
-    res.cookie("refreshToken", refreshToken, {
-     httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? "none" : "lax",
-    maxAge: TTL * 1000,
-    });
+    // ✅ isProduction use হচ্ছে properly
+    res.cookie("accessToken", accessToken, cookieOptions(15 * 60 * 1000));
+    res.cookie("refreshToken", refreshToken, cookieOptions(TTL * 1000));
 
     const csrfToken = await generateCSRFToken(user._id, sessionId, res);
 
     return { accessToken, refreshToken, csrfToken, sessionId, limitReached: false };
 };
-
 // ─── verifyRefreshToken ──────────────────────────────────────────
 export const verifyRefreshToken = async (refreshToken) => {
     try {
@@ -135,16 +137,11 @@ export const genetateAccessToken = (id, role, sessionId, res) => {
         { expiresIn: "15m" }
     );
 
-    res.cookie("accessToken", accessToken, {
-        httpOnly: true,
-        secure: false,
-        sameSite: "lax",
-        maxAge: 15 * 60 * 1000,
-    });
+    // ✅ এখানেও isProduction use করো
+    res.cookie("accessToken", accessToken, cookieOptions(15 * 60 * 1000));
 
     return accessToken;
 };
-
 // ─── Revoke ONE session (logout single device) ───────────────────
 export const revokeSession = async (userId, sessionId) => {
     await redisClint.sRem(`sessions:${userId}`, sessionId);
