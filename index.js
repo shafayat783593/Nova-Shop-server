@@ -51,12 +51,14 @@ app.use(cors({
 }));
 // Redis সেটআপ
 const redisUrl = process.env.REDIS_URL;
-if (!redisUrl) {
-    console.error("Missing redis Url");
-    process.exit(1);
-}
-
 export const redisClint = createClient({ url: redisUrl });
+if (redisUrl) {
+    redisClint.connect()
+        .then(() => console.log("Redis connected"))
+        .catch((err) => console.error("Redis error:", err));
+} else {
+    console.warn("Redis not found - continuing without cache");
+}
 
 redisClint.connect()
     .then(() => console.log("✅ Connected to Redis"))
@@ -98,5 +100,17 @@ const startServer = async () => {
         process.exit(1);
     }
 };
+
+
+
+
+app.use((err, req, res, next) => {
+    console.error("GLOBAL ERROR:", err);
+    res.status(500).json({
+        message: "Internal Server Error",
+        error: process.env.NODE_ENV === "production" ? null : err.message
+    });
+});
+
 
 startServer();
