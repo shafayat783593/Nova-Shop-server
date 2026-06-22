@@ -26,6 +26,8 @@
     "mongoose": "^9.0.1",
     "nanoid": "^5.1.9",
     "nodemailer": "^7.0.13",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
     "puppeteer-core": "^24.42.0",
     "redis": "^5.10.0",
     "slugify": "^1.6.9",

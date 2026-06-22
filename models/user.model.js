@@ -12,10 +12,11 @@ const schema = new mongoose.Schema(
             unique: true
 
         },
-        password: {
-            type: String,
-            require: true
-        },
+      password: {
+    type: String,
+    require: false,  
+    select: false,
+},
         role: {
             type: String,
             enum: ["customer", "owner", "deliveryboy","admin","vendor"], 
@@ -25,6 +26,10 @@ const schema = new mongoose.Schema(
             type: String,
             default: null,
         },
+        googleId: {
+    type: String,
+    default: null,
+},
         twoFactorEnabled: {
             type: Boolean,
             default: false,

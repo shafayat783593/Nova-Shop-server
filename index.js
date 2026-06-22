@@ -1,10 +1,12 @@
 import express from "express";
 import dotenv from "dotenv";
+dotenv.config();
 import { createServer } from "http"; // যোগ করা হয়েছে
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { createClient } from "redis";
 import mongoose from "mongoose"; // ইমপোর্ট চেক করুন
+import passport from "./config/passport.js";
 
 // Routes
 import connectDb from "./config/db.js";
@@ -24,10 +26,12 @@ import { invoiceRouter } from "./routers/Invoice.routes.js";
 import deliveryRoutes from "./routers/deliveryboy.routes.js";
 import reviewRoutes from "./routers/review.routes.js"
 import chatRouter from "./routers/chat.routes.js";
+
 // import dns from "dns";
 
 // কনফিগারেশন
-dotenv.config();
+
+
 const app = express();
 const httpServer = createServer(app);
 const PORT = process.env.PORT || 5000;
@@ -42,7 +46,6 @@ app.use(cors({
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
 }));
-
 // Redis সেটআপ
 const redisUrl = process.env.REDIS_URL;
 if (!redisUrl) {
@@ -76,10 +79,13 @@ app.use("/api/deliveryboys", deliveryRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/chat", chatRouter);
 // ডাটাবেস ও সার্ভার স্টার্ট
+import { initPassport } from "./config/passport.js";
 const startServer = async () => {
     try {
-        // MongoDB কানেকশন (connectDb ফাংশন ব্যবহার করলে নিচের mongoose.connect দরকার নেই)
         await connectDb();
+
+        initPassport(); // ✅ এখন dotenv already loaded, env vars available
+        app.use(passport.initialize());
 
         httpServer.listen(PORT, () => {
             console.log(`🚀 Server is running on port ${PORT}`);

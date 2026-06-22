@@ -105,6 +105,7 @@ export const initSocket = (httpServer) => {
 
         // ── 4. CHAT SYSTEM ──────────────────────────────────────────────────
         socket.on("joinConversation", (conversationId) => {
+            console.log(`🔗 joinConversation: ${conversationId}`);
             const roomId = conversationId?.toString();
             if (!roomId) return;
             socket.join(roomId);
