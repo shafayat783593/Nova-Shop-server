@@ -6,12 +6,13 @@ export const generateCSRFToken = async (userId, sessionId, res) => {
     const csrfToken = crypto.randomBytes(32).toString("hex");
     const key = `csrf:${userId}:${sessionId}`;
     await redisClint.setEx(key, 7 * 24 * 60 * 60, csrfToken);
+const isProduction = process.env.NODE_ENV === "production";
 
     res.cookie("csrfToken", csrfToken, {
-        httpOnly: false, // Frontend needs to read this
-        secure: false,
-        sameSite: "lax",
-        maxAge: 7 * 24 * 60 * 60 * 1000,
+      httpOnly: false,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     return csrfToken;

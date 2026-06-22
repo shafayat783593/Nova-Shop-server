@@ -317,6 +317,14 @@ export const myProfile = TryCatch(async (req, res) => {
 
 // ── Logout current device ─────────────────────────────────────────
 // ✅ FIX: revokeSession এর পর cookies ও clear করো
+const isProduction = process.env.NODE_ENV === "production";
+
+const cookieOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+};
+
 export const logoutUser = TryCatch(async (req, res) => {
     const userId = req.user?._id;
     const sessionId = req.sessionId;
@@ -325,25 +333,23 @@ export const logoutUser = TryCatch(async (req, res) => {
         await revokeSession(userId, sessionId);
     }
 
-    res.clearCookie("accessToken", { httpOnly: true, sameSite: "lax" });
-    res.clearCookie("refreshToken", { httpOnly: true, sameSite: "lax" });
-    res.clearCookie("csrfToken", { httpOnly: true, sameSite: "lax" });
+    res.clearCookie("accessToken", cookieOptions);
+    res.clearCookie("refreshToken", cookieOptions);
+    res.clearCookie("csrfToken", { ...cookieOptions, httpOnly: false });
 
     res.status(200).json({ message: "Logged out successfully" });
 });
 
-// ── Logout ALL devices ────────────────────────────────────────────
-// ✅ FIX: revokeRefreshToken সব sessions + keys মুছে দেয়
 export const logoutAll = TryCatch(async (req, res) => {
     const userId = req.user?._id;
 
     if (userId) {
-        await revokeRefreshToken(userId); // সব sessions, refreshTokens, csrf মুছে দেয়
+        await revokeRefreshToken(userId);
     }
 
-    res.clearCookie("accessToken", { httpOnly: true, sameSite: "lax" });
-    res.clearCookie("refreshToken", { httpOnly: true, sameSite: "lax" });
-    res.clearCookie("csrfToken", { httpOnly: true, sameSite: "lax" });
+    res.clearCookie("accessToken", cookieOptions);
+    res.clearCookie("refreshToken", cookieOptions);
+    res.clearCookie("csrfToken", { ...cookieOptions, httpOnly: false });
 
     res.status(200).json({ message: "Logged out from all devices" });
 });

@@ -29,7 +29,7 @@ const schema = new mongoose.Schema(
         googleId: {
     type: String,
     default: null,
-},
+}, 
         twoFactorEnabled: {
             type: Boolean,
             default: false,

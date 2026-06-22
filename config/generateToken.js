@@ -83,17 +83,17 @@ export const generateToken = async (user, res, req) => {
 
     // ── Cookies ──────────────────────────────────────────────────
     res.cookie("accessToken", accessToken, {
-        httpOnly: true,
-        secure: false,
-        sameSite: "lax",
-        maxAge: 15 * 60 * 1000,
+   httpOnly: true,
+    secure: isProduction,        // ✅ production-এ true, dev-এ false
+    sameSite: isProduction ? "none" : "lax",  // ✅ cross-site হলে none লাগবে
+    maxAge: 15 * 60 * 1000,
     });
 
     res.cookie("refreshToken", refreshToken, {
-        httpOnly: true,
-        secure: false,
-        sameSite: "lax",
-        maxAge: TTL * 1000,
+     httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    maxAge: TTL * 1000,
     });
 
     const csrfToken = await generateCSRFToken(user._id, sessionId, res);
