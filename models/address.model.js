@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { isValidDivision, isValidDistrict, getDivisionOfDistrict }
-    from "../utils/bangladeshAddress.js";
+    from "../utils/bangladeshaddress.js";
 
 const addressSchema = new mongoose.Schema(
     {
