@@ -101,12 +101,19 @@ export const loginUser = TryCatch(async (req, res) => {
         return res.status(429).json({ message: "Too many requests, try again later" });
     }
 
-    const user = await User.findOne({ email });
+    // ✅ password field explicitly select করো
+    const user = await User.findOne({ email }).select('+password');
     if (!user) return res.status(400).json({ message: "Invalid credentials" });
+
+    // ✅ Google-only account হলে password login allow করো না
+    if (!user.password && user.googleId) {
+        return res.status(400).json({ 
+            message: "This account uses Google login. Please sign in with Google." 
+        });
+    }
 
     const passwordOk = await bcrypt.compare(password, user.password);
     if (!passwordOk) return res.status(400).json({ message: "Invalid credentials" });
-
     await redisClint.setEx(rateLimitKey, 60, "true");
 
     // 2FA flow

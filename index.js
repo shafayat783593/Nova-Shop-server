@@ -52,17 +52,14 @@ app.use(cors({
 // Redis সেটআপ
 const redisUrl = process.env.REDIS_URL;
 export const redisClint = createClient({ url: redisUrl });
+
 if (redisUrl) {
     redisClint.connect()
         .then(() => console.log("Redis connected"))
-        .catch((err) => console.error("Redis error:", err));
+        .catch(err => console.error("Redis error:", err));
 } else {
     console.warn("Redis not found - continuing without cache");
 }
-
-redisClint.connect()
-    .then(() => console.log("✅ Connected to Redis"))
-    .catch((err) => console.error("❌ Redis Error:", err));
 
 // সকেট ইনিশিয়ালাইজেশন
 initSocket(httpServer);
