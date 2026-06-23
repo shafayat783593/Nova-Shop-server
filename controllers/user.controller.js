@@ -322,9 +322,8 @@ const isProduction = process.env.NODE_ENV === "production";
 const cookieOptions = {
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? "none" : "lax",
+    sameSite: "lax", // ✅ none → lax
 };
-
 export const logoutUser = TryCatch(async (req, res) => {
     const userId = req.user?._id;
     const sessionId = req.sessionId;

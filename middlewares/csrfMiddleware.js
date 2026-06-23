@@ -8,13 +8,12 @@ export const generateCSRFToken = async (userId, sessionId, res) => {
     await redisClint.setEx(key, 7 * 24 * 60 * 60, csrfToken);
 const isProduction = process.env.NODE_ENV === "production";
 
-    res.cookie("csrfToken", csrfToken, {
-      httpOnly: false,
+res.cookie("csrfToken", csrfToken, {
+    httpOnly: false,
     secure: isProduction,
-    sameSite: isProduction ? "none" : "lax",
+    sameSite: "lax", // ✅ none → lax
     maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-
+});
     return csrfToken;
 };
 
