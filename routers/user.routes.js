@@ -48,7 +48,7 @@ router.get(
             const state = req.query.state || '';
             let returnUrl = '';
             if (state) {
-                try { returnUrl = Buffer.from(state, 'base64').toString('utf-8'); } 
+                try { returnUrl = Buffer.from(state, 'base64').toString('utf-8'); }
                 catch { returnUrl = ''; }
             }
 
@@ -56,20 +56,20 @@ router.get(
                 return res.redirect(`${process.env.FRONTEND_URL}/login?error=MAX_SESSIONS_REACHED`);
             }
 
-            // ✅ returnUrl থাকলে সেখানে, না হলে role দেখে redirect
-            if (returnUrl) {
-                return res.redirect(`${process.env.FRONTEND_URL}${returnUrl}`);
-            }
+            const destination = returnUrl || (
+                { admin: '/admin', vendor: '/vendor', deliveryboy: '/deliveryboy' }[user.role] || '/'
+            );
 
-            const roleRedirects = {
-                admin: '/admin',
-                vendor: '/vendor', 
-                deliveryboy: '/deliveryboy',
-                customer: '/',
-            };
+            // ✅ token URL-এ pass করো — frontend-এ cookie set হবে
+            const params = new URLSearchParams({
+                accessToken: result.accessToken,
+                refreshToken: result.refreshToken,
+                csrfToken: result.csrfToken,
+                sessionId: result.sessionId,
+                returnUrl: destination,
+            });
 
-            const destination = roleRedirects[user.role] || '/';
-            res.redirect(`${process.env.FRONTEND_URL}${destination}`);
+            res.redirect(`${process.env.FRONTEND_URL}/auth/google/success?${params.toString()}`);
 
         } catch (err) {
             console.error("Google callback error:", err);
