@@ -50,7 +50,7 @@ export const generateToken = async (user, res, req) => {
     const accessToken = jwt.sign(
         { id: user._id, role: user.role, sessionId },
         process.env.JWT_SECRET,
-        { expiresIn: "15m" }
+        { expiresIn: "1d" }
     );
 
     const refreshToken = jwt.sign(
@@ -96,7 +96,7 @@ export const generateToken = async (user, res, req) => {
     await redisClint.setEx(`refreshToken:${user._id}:${sessionId}`, TTL, refreshToken);
 
     // ✅ isProduction use হচ্ছে properly
-    res.cookie("accessToken", accessToken, cookieOptions(15 * 60 * 1000));
+    res.cookie("accessToken", accessToken, cookieOptions(24 * 60 * 60 * 1000));
     res.cookie("refreshToken", refreshToken, cookieOptions(TTL * 1000));
 
     const csrfToken = await generateCSRFToken(user._id, sessionId, res);
@@ -134,11 +134,11 @@ export const genetateAccessToken = (id, role, sessionId, res) => {
     const accessToken = jwt.sign(
         { id, role, sessionId },
         process.env.JWT_SECRET,
-        { expiresIn: "15m" }
+        { expiresIn: "1d" }
     );
 
     // ✅ এখানেও isProduction use করো
-    res.cookie("accessToken", accessToken, cookieOptions(15 * 60 * 1000));
+    res.cookie("accessToken", accessToken, cookieOptions(24 * 60 * 60 * 1000));
 
     return accessToken;
 };
