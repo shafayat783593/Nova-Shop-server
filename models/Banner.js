@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
 const bannerSchema = new mongoose.Schema({
-    title: { type: String, required: true },
-    description: { type: String, required: true },
-    imageUrl: { type: String, required: true },
+    title: { type: String, required: false, default: "" },
+    description: { type: String, required: false, default: "" },
+    imageUrl: { type: String, required: false, default: "" },
     link: { type: String, default: '#' },
     isActive: { type: Boolean, default: true }
 }, { timestamps: true });
