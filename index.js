@@ -26,7 +26,8 @@ import { invoiceRouter } from "./routers/Invoice.routes.js";
 import deliveryRoutes from "./routers/deliveryboy.routes.js";
 import reviewRoutes from "./routers/review.routes.js"
 import chatRouter from "./routers/chat.routes.js";
-import adminRoutes from "./routers/routes.admin.routes.js";
+import contactRouter from "./routers/contact.routes.js"
+import adminRoutes from "./routers/admin.routes.js"
 // import dns from "dns";
 
 // কনফিগারেশন
@@ -80,7 +81,8 @@ app.use("/api/invoices", invoiceRouter);
 app.use("/api/deliveryboys", deliveryRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/chat", chatRouter);
-app.use("/api/admin",adminRoutes );
+app.use("/api/admin", adminRoutes);
+app.use("/api/contact", contactRouter)
 // ডাটাবেস ও সার্ভার স্টার্ট
 import { initPassport } from "./config/passport.js";
 const startServer = async () => {
