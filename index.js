@@ -104,13 +104,13 @@ const startServer = async () => {
 
 
 
+// route er baire, global error handler e
 app.use((err, req, res, next) => {
+    if (err.name === "TokenError" || err.code === "invalid_grant") {
+        return res.redirect(`${process.env.FRONTEND_URL}/login?error=session_expired`);
+    }
     console.error("GLOBAL ERROR:", err);
-    res.status(500).json({
-        message: "Internal Server Error",
-        error: process.env.NODE_ENV === "production" ? null : err.message
-    });
+    res.status(500).json({ message: "Internal Server Error" });
 });
-
 
 startServer();

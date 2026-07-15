@@ -36,6 +36,18 @@ router.post("/reset-password", resetPassword);
 // user.routes.js callback-এ
 router.get(
     "/google/callback",
+    (req, res, next) => {
+        const code = req.query.code;
+        if (code && usedGoogleCodes.has(code)) {
+            console.warn("Duplicate Google OAuth code blocked:", code.slice(0, 15));
+            return res.redirect(`${process.env.FRONTEND_URL}/login?error=duplicate_attempt`);
+        }
+        if (code) {
+            usedGoogleCodes.add(code);
+            setTimeout(() => usedGoogleCodes.delete(code), 2 * 60 * 1000); // 2 min pore clean
+        }
+        next();
+    },
     passport.authenticate("google", {
         session: false,
         failureRedirect: `${process.env.FRONTEND_URL}/login?error=google_failed`,
