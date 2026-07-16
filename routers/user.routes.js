@@ -13,6 +13,7 @@ router.get("/google", (req, res, next) => {
         scope: ["profile", "email"],
         session: false,
         state: returnUrl ? Buffer.from(returnUrl).toString('base64') : '',
+        prompt: "select_account", // ✅ ei line ta add koro
     })(req, res, next);
 });
 
@@ -41,11 +42,12 @@ router.get(
         const code = req.query.code;
         if (code && usedGoogleCodes.has(code)) {
             console.warn("Duplicate Google OAuth code blocked:", code.slice(0, 15));
-            return res.redirect(`${process.env.FRONTEND_URL}/login?error=duplicate_attempt`);
+            // ✅ token chara e success page e pathao, frontend nijei check korবে
+            return res.redirect(`${process.env.FRONTEND_URL}/google/success?duplicate=true`);
         }
         if (code) {
             usedGoogleCodes.add(code);
-            setTimeout(() => usedGoogleCodes.delete(code), 2 * 60 * 1000); // 2 min pore clean
+            setTimeout(() => usedGoogleCodes.delete(code), 2 * 60 * 1000);
         }
         next();
     },
@@ -53,6 +55,7 @@ router.get(
         session: false,
         failureRedirect: `${process.env.FRONTEND_URL}/login?error=google_failed`,
     }),
+    
     async (req, res) => {
         try {
             const user = req.user;
