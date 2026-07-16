@@ -567,3 +567,100 @@ export const respondToAssignment = TryCatch(async (req, res) => {
         data: { deliveryAssignStatus: order.deliveryAssignStatus },
     });
 });
+
+
+
+
+
+
+
+
+
+
+
+
+// ─── A. Admin: Search users to promote (customers, vendors — not already deliveryboy/admin) ──
+// GET /api/admin/users/search?query=
+export const adminSearchUsers = TryCatch(async (req, res) => {
+    const { query } = req.query;
+
+    if (!query || query.trim().length < 2) {
+        return res.json({ success: true, data: [] });
+    }
+
+    const users = await User.find({
+        role: { $nin: ["deliveryboy", "admin", "owner"] },
+        $or: [
+            { name: { $regex: query.trim(), $options: "i" } },
+            { email: { $regex: query.trim(), $options: "i" } },
+        ],
+    })
+        .select("name email avatar role createdAt")
+        .limit(10)
+        .lean();
+
+    return res.json({ success: true, data: users });
+});
+
+// ─── B. Admin: Promote an existing user to delivery boy (no invite email needed) ──
+// POST /api/admin/delivery-boys/promote
+// Body: { userId, phone, zones[] }
+export const adminPromoteToDeliveryBoy = TryCatch(async (req, res) => {
+    const { userId, phone, zones } = req.body;
+
+    if (!userId) return sendError(res, "userId is required");
+
+    const user = await User.findById(userId);
+    if (!user) return sendError(res, "User not found", 404);
+
+    if (user.role === "deliveryboy") {
+        return sendError(res, "This user is already a delivery boy");
+    }
+    if (["admin", "owner"].includes(user.role)) {
+        return sendError(res, "Cannot convert an admin/owner account", 400);
+    }
+
+    const existingProfile = await DeliveryBoy.findOne({ user: user._id });
+    if (existingProfile) {
+        return sendError(res, "Delivery profile already exists for this user");
+    }
+
+    const previousRole = user.role;
+    user.role = "deliveryboy";
+    await user.save();
+
+    const deliveryBoy = await DeliveryBoy.create({
+        user: user._id,
+        phone: phone || "",
+        zones: zones || [],
+    });
+
+    // Notify the user — best-effort, don't block the response on it
+    sendMail({
+        email: user.email,
+        subject: "Nova Shop — You're now a Delivery Partner",
+        html: `<div style="font-family:sans-serif;max-width:520px;margin:auto;">
+            <h2>You've been made a Delivery Partner 🚴</h2>
+            <p>Hi ${user.name},</p>
+            <p>An admin has upgraded your NovaShop account to a Delivery Partner role.
+            Log in with your existing email and password to access the delivery dashboard.</p>
+        </div>`,
+    }).catch(console.error);
+
+    return res.status(201).json({
+        success: true,
+        message: `${user.name} promoted to delivery boy`,
+        data: {
+            _id: deliveryBoy._id,
+            userId: user._id,
+            name: user.name,
+            email: user.email,
+            avatar: user.avatar,
+            phone: deliveryBoy.phone,
+            zones: deliveryBoy.zones,
+            isActive: deliveryBoy.isActive,
+            isAvailable: deliveryBoy.isAvailable,
+            previousRole,
+        },
+    });
+});

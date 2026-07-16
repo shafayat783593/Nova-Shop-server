@@ -20,6 +20,8 @@ import {
     toggleAvailability,
     getDeliveryProfile,
     respondToAssignment,
+    adminSearchUsers,
+    adminPromoteToDeliveryBoy,
 } from "../controllers/Deliveryboy.controller.js";
 import { authorizeAdmin, isAuth, isDeliveryBoy } from "../middlewares/isAuth.js";
 
@@ -87,5 +89,7 @@ router.patch("/admin/delivery-boys/:deliveryBoyId/toggle-active", isAuth, author
 // DELETE /api/admin/delivery-boys/:deliveryBoyId
 router.delete("/admin/delivery-boys/:deliveryBoyId", isAuth, authorizeAdmin, adminDeleteDeliveryBoy);
 
+router.get("/admin/users/search", isAuth, authorizeAdmin, adminSearchUsers);
+router.post("/admin/delivery-boys/promote", isAuth, authorizeAdmin, adminPromoteToDeliveryBoy);
 
 export default router;

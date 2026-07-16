@@ -326,3 +326,24 @@ export const toggleVisibility = async (req, res) => {
         return res.status(500).json({ success: false, message: err.message });
     }
 };
+
+
+
+// ─── GET FEATURED/TOP REVIEWS (site-wide, for homepage) ──────────────────────
+// GET /api/reviews/featured?limit=8
+export const getFeaturedReviews = async (req, res) => {
+    try {
+        const limit = Math.min(20, parseInt(req.query.limit) || 8);
+
+        const reviews = await Review.find({ isVisible: true, rating: { $gte: 2 }, comment: { $ne: "" } })
+            .populate("user", "name avatar")
+            .populate("product", "name images slug")
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .lean();
+
+        return res.status(200).json({ success: true, data: reviews });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+    }
+};

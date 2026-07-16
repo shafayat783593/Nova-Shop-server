@@ -57,16 +57,25 @@ export const sendMessage = async (req, res) => {
     // সমাধান: emit এ সঠিক string roomId ব্যবহার করো
     const roomId = conversation._id.toString(); // ✅ একবার string করো
 
+    // ✅ Frontend এ avatar/name সহ profile দেখানোর জন্য
+    // req.user থেকেই নাও (auth middleware ইতিমধ্যে user load করে থাকে)
+    const senderInfo = {
+      _id: senderId.toString(),
+      name: req.user.name || null,
+      avatar: req.user.avatar || null,
+    };
+
+    const messagePayload = {
+      _id: newMessage._id.toString(),
+      message: newMessage.message,
+      senderRole: newMessage.senderRole,
+      sender: senderInfo,
+      createdAt: newMessage.createdAt,
+      conversationId: roomId,
+    };
+
     try {
       const io = getIO();
-
-      const messagePayload = {
-        _id: newMessage._id.toString(),
-        message: newMessage.message,
-        senderRole: newMessage.senderRole,
-        createdAt: newMessage.createdAt,
-        conversationId: roomId,
-      };
 
       // ✅ Room এ emit
       io.to(roomId).emit("newMessage", messagePayload);
@@ -85,13 +94,7 @@ export const sendMessage = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: "Message sent",
-      data: {
-        _id: newMessage._id.toString(),
-        message: newMessage.message,
-        senderRole: newMessage.senderRole,
-        createdAt: newMessage.createdAt,
-        conversationId: roomId,
-      },
+      data: messagePayload,
       conversationId: roomId, // ✅ string হিসেবে পাঠাও
     });
   } catch (error) {
@@ -108,8 +111,10 @@ export const getMessages = async (req, res) => {
   try {
     const { conversationId } = req.params;
 
+    // ✅ sender এর নাম ও avatar populate করো, যাতে চ্যাটে profile image দেখানো যায়
     const messages = await ChatMessage.find({ conversationId })
       .sort({ createdAt: 1 })
+      .populate("sender", "name avatar role")
       .lean();
 
     return res.status(200).json({ success: true, data: messages });
@@ -139,6 +144,7 @@ export const getMyConversation = async (req, res) => {
 // ─────────────────────────────────────────────
 export const getAllConversations = async (req, res) => {
   try {
+    // ✅ customerId এর সাথে avatar আগে থেকেই populate করা আছে
     const conversations = await Conversation.find({ isActive: true })
       .populate("customerId", "name email avatar")
       .sort({ updatedAt: -1 })
