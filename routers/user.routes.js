@@ -86,7 +86,7 @@ router.get(
                 returnUrl: destination,
             });
 
-            res.redirect(`${process.env.FRONTEND_URL}/auth/google/success?${params.toString()}`);
+            res.redirect(`${process.env.FRONTEND_URL}/google/success?${params.toString()}`);
 
         } catch (err) {
             console.error("Google callback error:", err);
