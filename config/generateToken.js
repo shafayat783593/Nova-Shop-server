@@ -148,8 +148,8 @@ export const revokeSession = async (userId, sessionId) => {
     await redisClint.del(`session:${sessionId}`);
     await redisClint.del(`refreshToken:${userId}:${sessionId}`);
     await redisClint.del(`csrf:${userId}:${sessionId}`);
+    await redisClint.del(`user:${userId}`); 
 };
-
 // ─── Revoke ALL sessions (logout all devices) ────────────────────
 export const revokeRefreshToken = async (userId) => {
     const sessions = await redisClint.sMembers(`sessions:${userId}`);

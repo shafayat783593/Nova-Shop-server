@@ -31,6 +31,7 @@ router.post("/forgot-password", forgotPassword);
 
 // POST /api/auth/reset-password   →  verifies OTP + sets new password
 router.post("/reset-password", resetPassword);
+const usedGoogleCodes = new Set();
 
 
 // user.routes.js callback-এ
